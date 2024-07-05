@@ -15,20 +15,24 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
-from songscope import views 
+from songscope import views
+from songscope.views import spotify_login, spotify_callback, user_profile
 
-
-#this is where you would define routes - your get one, post one, etc...
-#if you register your viewset to routers, it does all this for you
-#less code but good for most cases, if you need more control, do it manually
+# this is where you would define routes - your get one, post one, etc...
+# if you register your viewset to routers, it does all this for you
+# less code but good for most cases, if you need more control, do it manually
 router = routers.DefaultRouter()
 router.register(r'users', views.UserViewSet)
 router.register(r'groups', views.GroupViewSet)
 
 urlpatterns = [
-    path("", include(router.urls) ),
-    path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
+    path('admin/', admin.site.urls),
+    path('', include(router.urls)),
+    path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
+    path('login/', spotify_login, name='spotify-login'),
+    path('callback/', spotify_callback, name='spotify-callback'),
+    path('profile/', user_profile, name='user-profile'),
 ]
-
