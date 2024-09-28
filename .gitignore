@@ -42,3 +42,5 @@ next-env.d.ts
 .env.local
 
 node_modules/
+**/node_modules/
+**/next-swc.darwin-arm64.node
