@@ -72,3 +72,19 @@ def user_profile(request):
     })
     response = spotify.get('https://api.spotify.com/v1/me')
     return JsonResponse(response.json())
+
+
+@login_required
+def get_user_playlists(request):
+    token = get_user_tokens(request.user)
+    if not token:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+
+    spotify = OAuth2Session(client_id, token={
+        'access_token': token.access_token,
+        'refresh_token': token.refresh_token,
+        'token_type': token.token_type,
+        'expires_in': token.expires_in
+    })
+    response = spotify.get('https://api.spotify.com/v1/me/playlists')
+    return JsonResponse(response.json())

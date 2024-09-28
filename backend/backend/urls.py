@@ -35,4 +35,5 @@ urlpatterns = [
     path('login/', spotify_login, name='spotify-login'),
     path('callback/', spotify_callback, name='spotify-callback'),
     path('profile/', user_profile, name='user-profile'),
+    path('api/user-playlists/', views.get_user_playlists, name='user_playlists'),
 ]
