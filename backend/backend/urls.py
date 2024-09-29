@@ -19,7 +19,8 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
 from songscope import views
-from songscope.views import spotify_login, spotify_callback, user_profile
+from songscope.views import spotify_login, spotify_callback, user_profile,get_user_top_tracks
+
 
 # this is where you would define routes - your get one, post one, etc...
 # if you register your viewset to routers, it does all this for you
@@ -36,4 +37,5 @@ urlpatterns = [
     path('callback/', spotify_callback, name='spotify-callback'),
     path('profile/', user_profile, name='user-profile'),
     path('api/user-playlists/', views.get_user_playlists, name='user_playlists'),
+    path('api/user-top-tracks/', get_user_top_tracks, name='user_top_tracks'),
 ]

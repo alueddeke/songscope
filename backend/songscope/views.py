@@ -12,6 +12,18 @@ from requests_oauthlib import OAuth2Session
 from django.contrib.auth.decorators import login_required
 from .utils import generate_code_verifier, generate_code_challenge, update_or_create_user_tokens, get_user_tokens
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from .utils import get_user_tokens
+from requests_oauthlib import OAuth2Session
+
+from django.http import JsonResponse
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+
+
+
 client_id = settings.SPOTIFY_CLIENT_ID
 redirect_uri = settings.REDIRECT_URI
 scope = 'user-read-private user-read-email user-library-read'
@@ -88,3 +100,24 @@ def get_user_playlists(request):
     })
     response = spotify.get('https://api.spotify.com/v1/me/playlists')
     return JsonResponse(response.json())
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_top_tracks(request):
+    token = get_user_tokens(request.user)
+    if not token:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
+
+    spotify = OAuth2Session(client_id, token={
+        'access_token': token.access_token,
+        'refresh_token': token.refresh_token,
+        'token_type': token.token_type,
+        'expires_in': token.expires_in
+    })
+    response = spotify.get('https://api.spotify.com/v1/me/top/tracks?limit=10')
+    
+    if response.status_code == 200:
+        return JsonResponse(response.json())
+    else:
+        return JsonResponse({'error': 'Failed to fetch top tracks'}, status=response.status_code)
