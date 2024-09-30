@@ -13,7 +13,7 @@ import requests
 import time
 import json
 import logging
-import os
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def spotify_callback(request):
         spotify = OAuth2Session(client_id, redirect_uri=redirect_uri)
         
         # Log the full request URL for debugging
-        logger.debug(f"Full callback URL: {request.build_absolute_uri()}")
+        # logger.debug(f"Full callback URL: {request.build_absolute_uri()}")
         
         token = spotify.fetch_token(
             token_url,
@@ -49,10 +49,10 @@ def spotify_callback(request):
             authorization_response=request.build_absolute_uri()
         )
         
-        logger.debug(f"Received token: {json.dumps(token, indent=2)}")
+        # logger.debug(f"Received token: {json.dumps(token, indent=2)}")
         
         user_info = spotify.get('https://api.spotify.com/v1/me').json()
-        logger.debug(f"User info: {json.dumps(user_info, indent=2)}")
+        # logger.debug(f"User info: {json.dumps(user_info, indent=2)}")
         
         user, created = User.objects.get_or_create(
             username=user_info['id'],
@@ -75,49 +75,9 @@ def spotify_callback(request):
         return redirect(f"{frontend_url}/profile")
     
     except Exception as e:
-        logger.error(f"Error in spotify_callback: {str(e)}", exc_info=True)
+        # logger.error(f"Error in spotify_callback: {str(e)}", exc_info=True)
         return JsonResponse({'error': f"Failed to process callback: {str(e)}"}, status=400)
 
-# @require_http_methods(["GET"])
-# def spotify_callback(request):
-    spotify = OAuth2Session(client_id, state=request.session.get('oauth_state'), redirect_uri=redirect_uri)
-    
-    try:
-        token = spotify.fetch_token(
-            token_url,
-            client_secret=client_secret,
-            authorization_response=request.build_absolute_uri()
-        )
-    except Exception as e:
-        return JsonResponse({'error': 'Failed to fetch access token'}, status=400)
-
-    try:
-        user_info = spotify.get('https://api.spotify.com/v1/me').json()
-    except Exception as e:
-        return JsonResponse({'error': 'Failed to fetch user info'}, status=400)
-
-    try:
-        user, created = User.objects.get_or_create(
-            username=user_info['id'],
-            defaults={'email': user_info.get('email', '')}
-        )
-    except Exception as e:
-        return JsonResponse({'error': 'Failed to create/get user'}, status=500)
-
-    try:
-        spotify_token, _ = SpotifyToken.objects.get_or_create(user=user)
-        spotify_token.update_token_info(
-            access_token=token['access_token'],
-            refresh_token=token['refresh_token'],
-            expires_in=token['expires_in']
-        )
-    except Exception as e:
-        return JsonResponse({'error': 'Failed to save Spotify token'}, status=500)
-
-    login(request, user)
-
-    frontend_url = settings.FRONTEND_URL
-    return redirect(f"{frontend_url}/profile")
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

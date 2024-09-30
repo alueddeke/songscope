@@ -30,6 +30,10 @@ class SpotifyToken(models.Model):
     def __str__(self):
         return f"{self.user.username}'s Spotify Token"
 
+
+
+#potential models that could help:
+
 #Track info to store
 class Track(models.Model):
     spotify_id = models.CharField(max_length=255, unique=True)

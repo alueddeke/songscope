@@ -26,8 +26,7 @@ from songscope.views import spotify_login, spotify_callback
 # if you register your viewset to routers, it does all this for you
 # less code but good for most cases, if you need more control, do it manually
 router = routers.DefaultRouter()
-# router.register(r'users', views.UserViewSet)
-# router.register(r'groups', views.GroupViewSet)
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -35,8 +34,5 @@ urlpatterns = [
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     path('spotify-login/', views.spotify_login, name='spotify-login'),
     path('spotify/callback/', views.spotify_callback, name='spotify-callback'),
-    # path('profile/', user_profile, name='user-profile'),
-    # path('api/user-playlists/', views.get_user_playlists, name='user_playlists'),
-    # path('api/user-top-tracks/', views.get_user_top_tracks, name='user_top_tracks'),
     path('api/check-auth/', views.check_auth, name='check_auth'),
 ]
