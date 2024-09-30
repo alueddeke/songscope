@@ -11,6 +11,14 @@ from requests_oauthlib import OAuth2Session
 from .models import SpotifyToken
 import requests
 import time
+import json
+import logging
+import os
+
+logger = logging.getLogger(__name__)
+
+if settings.OAUTHLIB_INSECURE_TRANSPORT:
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 client_id = settings.SPOTIFY_CLIENT_ID
 client_secret = settings.SPOTIFY_CLIENT_SECRET
@@ -26,8 +34,52 @@ def spotify_login(request):
     request.session['oauth_state'] = state
     return redirect(authorization_url)
 
+
 @require_http_methods(["GET"])
 def spotify_callback(request):
+    try:
+        spotify = OAuth2Session(client_id, redirect_uri=redirect_uri)
+        
+        # Log the full request URL for debugging
+        logger.debug(f"Full callback URL: {request.build_absolute_uri()}")
+        
+        token = spotify.fetch_token(
+            token_url,
+            client_secret=client_secret,
+            authorization_response=request.build_absolute_uri()
+        )
+        
+        logger.debug(f"Received token: {json.dumps(token, indent=2)}")
+        
+        user_info = spotify.get('https://api.spotify.com/v1/me').json()
+        logger.debug(f"User info: {json.dumps(user_info, indent=2)}")
+        
+        user, created = User.objects.get_or_create(
+            username=user_info['id'],
+            defaults={'email': user_info.get('email', '')}
+        )
+        
+        spotify_token, _ = SpotifyToken.objects.update_or_create(
+            user=user,
+            defaults={
+                'access_token': token['access_token'],
+                'refresh_token': token.get('refresh_token'),
+                'expires_in': token['expires_in'],
+                'token_type': token['token_type']
+            }
+        )
+        
+        login(request, user)
+        
+        frontend_url = settings.FRONTEND_URL
+        return redirect(f"{frontend_url}/profile")
+    
+    except Exception as e:
+        logger.error(f"Error in spotify_callback: {str(e)}", exc_info=True)
+        return JsonResponse({'error': f"Failed to process callback: {str(e)}"}, status=400)
+
+# @require_http_methods(["GET"])
+# def spotify_callback(request):
     spotify = OAuth2Session(client_id, state=request.session.get('oauth_state'), redirect_uri=redirect_uri)
     
     try:

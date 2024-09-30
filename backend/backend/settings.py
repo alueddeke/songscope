@@ -12,14 +12,16 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 from decouple import config
 
+# Set this to True for local development, False for production
+OAUTHLIB_INSECURE_TRANSPORT = config('OAUTHLIB_INSECURE_TRANSPORT', 'False') == 'True'
+
+
 SPOTIFY_CLIENT_ID = config('SPOTIFY_CLIENT_ID')
 SPOTIFY_CLIENT_SECRET = config('SPOTIFY_CLIENT_SECRET')
 SPOTIFY_REDIRECT_URI = config('SPOTIFY_REDIRECT_URI')
 
 # Frontend URL
 FRONTEND_URL = config('FRONTEND_URL')
-
-
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = "django-insecure-2nagt=pfbkp%5#u*^r4bwjenk2b_3a)ly-y*656vzx%qvzv6v="
@@ -37,6 +39,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS' :  'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10
 }
+
+
 
 INSTALLED_APPS = [
     'songscope',
@@ -59,7 +63,7 @@ LOGGING = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'INFO',
+        'level': 'DEBUG',
     },
 }
 
