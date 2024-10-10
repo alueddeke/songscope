@@ -4,7 +4,35 @@ import base64
 import hashlib
 import os
 from .models import SpotifyToken
+import requests
 from django.utils import timezone
+from datetime import timedelta
+
+def get_spotify_client(access_token):
+    return {
+        'headers': {
+            'Authorization': f'Bearer {access_token}',
+            'Content-Type': 'application/json'
+        }
+    }
+
+def refresh_spotify_token(spotify_token):
+    data = {
+        'grant_type': 'refresh_token',
+        'refresh_token': spotify_token.refresh_token,
+        'client_id': 'your_client_id',  # Replace with your actual client ID
+        'client_secret': 'your_client_secret'  # Replace with your actual client secret
+    }
+    response = requests.post('https://accounts.spotify.com/api/token', data=data)
+    new_token_info = response.json()
+
+    spotify_token.access_token = new_token_info['access_token']
+    spotify_token.expires_at = timezone.now() + timedelta(seconds=new_token_info['expires_in'])
+    if 'refresh_token' in new_token_info:
+        spotify_token.refresh_token = new_token_info['refresh_token']
+    spotify_token.save()
+
+    return spotify_token
 
 def generate_code_verifier():
     """Generates a code verifier for PKCE."""

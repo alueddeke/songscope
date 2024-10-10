@@ -9,11 +9,14 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from requests_oauthlib import OAuth2Session
 from .models import SpotifyToken
-import requests
 import time
-import json
 import logging
+from django.utils import timezone
+from datetime import timedelta
 import os
+from django.http import JsonResponse
+from .utils import get_spotify_client, refresh_spotify_token
+import requests
 
 
 logger = logging.getLogger(__name__)
@@ -30,9 +33,11 @@ token_url = 'https://accounts.spotify.com/api/token'
 
 @require_http_methods(["GET"])
 def spotify_login(request):
+    # print("Spotify login view accessed")  
     spotify = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
     authorization_url, state = spotify.authorization_url(authorization_base_url)
     request.session['oauth_state'] = state
+    # print(f"Redirecting to: {authorization_url}")  
     return redirect(authorization_url)
 
 
@@ -41,24 +46,21 @@ def spotify_callback(request):
     try:
         spotify = OAuth2Session(client_id, redirect_uri=redirect_uri)
         
-        # Log the full request URL for debugging
-        # logger.debug(f"Full callback URL: {request.build_absolute_uri()}")
-        
         token = spotify.fetch_token(
             token_url,
             client_secret=client_secret,
             authorization_response=request.build_absolute_uri()
         )
         
-        # logger.debug(f"Received token: {json.dumps(token, indent=2)}")
-        
         user_info = spotify.get('https://api.spotify.com/v1/me').json()
-        # logger.debug(f"User info: {json.dumps(user_info, indent=2)}")
         
         user, created = User.objects.get_or_create(
             username=user_info['id'],
             defaults={'email': user_info.get('email', '')}
         )
+        
+        # Calculate expires_at as a timezone-aware datetime
+        expires_at = timezone.now() + timedelta(seconds=token['expires_in'])
         
         spotify_token, _ = SpotifyToken.objects.update_or_create(
             user=user,
@@ -66,6 +68,7 @@ def spotify_callback(request):
                 'access_token': token['access_token'],
                 'refresh_token': token.get('refresh_token'),
                 'expires_in': token['expires_in'],
+                'expires_at': expires_at,  # Use the calculated expires_at
                 'token_type': token['token_type']
             }
         )
@@ -76,34 +79,44 @@ def spotify_callback(request):
         return redirect(f"{frontend_url}/profile")
     
     except Exception as e:
-        # logger.error(f"Error in spotify_callback: {str(e)}", exc_info=True)
+        logger.error(f"Error in spotify_callback: {str(e)}", exc_info=True)
         return JsonResponse({'error': f"Failed to process callback: {str(e)}"}, status=400)
+  
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@login_required
+
 def get_user_top_tracks(request):
     try:
         spotify_token = SpotifyToken.objects.get(user=request.user)
-    except SpotifyToken.DoesNotExist:
-        return JsonResponse({'error': 'No Spotify token found'}, status=400)
-    
-    if spotify_token.is_expired():
-        try:
+        if spotify_token.is_expired():
             spotify_token = refresh_spotify_token(spotify_token)
-        except Exception as e:
-            return JsonResponse({'error': 'Failed to refresh Spotify token'}, status=500)
-    
-    headers = {
-        'Authorization': f'Bearer {spotify_token.access_token}'
-    }
-    
-    response = requests.get('https://api.spotify.com/v1/me/top/tracks', headers=headers)
-    
-    if response.status_code == 200:
-        return JsonResponse(response.json())
-    else:
-        return JsonResponse({'error': 'Failed to fetch top tracks'}, status=response.status_code)
+        
+        client = get_spotify_client(spotify_token.access_token)
+        response = requests.get(
+            'https://api.spotify.com/v1/me/top/tracks',
+            headers=client['headers'],
+            params={'limit': 10, 'time_range': 'short_term'}
+        )
+        
+        if response.status_code != 200:
+            return JsonResponse({'error': 'Failed to fetch top tracks from Spotify'}, status=response.status_code)
+        
+        top_tracks = response.json()
+        
+        tracks_data = [{
+            'id': track['id'],
+            'name': track['name'],
+            'artist': track['artists'][0]['name'],
+            'album': track['album']['name'],
+            'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None
+        } for track in top_tracks['items']]
+        
+        return JsonResponse({'tracks': tracks_data})
+    except SpotifyToken.DoesNotExist:
+        return JsonResponse({'error': 'Spotify token not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
 def check_auth(request):
