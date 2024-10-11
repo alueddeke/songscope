@@ -1,6 +1,5 @@
-import axios from "axios";
 import React, { useEffect, useState } from "react";
-
+import { get } from "../../../../services/axios";
 interface Track {
   id: string;
   name: string;
@@ -17,20 +16,15 @@ export default function TopTracks() {
   useEffect(() => {
     const fetchTopTracks = async () => {
       try {
-        const response = await axios.get<{ tracks: Track[] }>(
-          "http://localhost:8000/api/user-top-tracks/",
-          { withCredentials: true }
+        const response = await get<{ tracks: Track[] }>(
+          "/api/user-top-tracks/"
         );
-        setTopTracks(response.data.tracks);
+        setTopTracks(response.tracks);
         setLoading(false);
       } catch (err) {
         console.error(err);
-        if (axios.isAxiosError(err)) {
-          if (err.response?.status === 401) {
-            setError("Please log in to view your top tracks");
-          } else {
-            setError(`Failed to fetch top tracks: ${err.response?.statusText}`);
-          }
+        if (err instanceof Error) {
+          setError(`Failed to fetch top tracks: ${err.message}`);
         } else {
           setError("An unexpected error occurred");
         }
