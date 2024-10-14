@@ -36,4 +36,6 @@ urlpatterns = [
     path('spotify/callback/', views.spotify_callback, name='spotify-callback'),
     path('api/check-auth/', views.check_auth, name='check_auth'),
     path('api/user-top-tracks/', views.get_user_top_tracks, name='user_top_tracks'),
+    path('api/user-recently-played/', views.get_user_recently_played, name='user_recently_played'),
+    path('api/user-top-artists/', views.get_user_top_artists, name='user_top_artists'),
 ]

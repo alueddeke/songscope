@@ -7,6 +7,7 @@ from .models import SpotifyToken
 import requests
 from django.utils import timezone
 from datetime import timedelta
+from django.conf import settings
 
 def get_spotify_client(access_token):
     return {
@@ -18,11 +19,11 @@ def get_spotify_client(access_token):
 
 def refresh_spotify_token(spotify_token):
     data = {
-        'grant_type': 'refresh_token',
-        'refresh_token': spotify_token.refresh_token,
-        'client_id': 'your_client_id',  # Replace with your actual client ID
-        'client_secret': 'your_client_secret'  # Replace with your actual client secret
-    }
+            'grant_type': 'refresh_token',
+            'refresh_token': spotify_token.refresh_token,
+            'client_id': settings.SPOTIFY_CLIENT_ID,
+            'client_secret': settings.SPOTIFY_CLIENT_SECRET
+        }
     response = requests.post('https://accounts.spotify.com/api/token', data=data)
     new_token_info = response.json()
 
@@ -34,15 +35,17 @@ def refresh_spotify_token(spotify_token):
 
     return spotify_token
 
+# security for oauth
 def generate_code_verifier():
     """Generates a code verifier for PKCE."""
     return base64.urlsafe_b64encode(os.urandom(43)).decode('utf-8').rstrip('=')
-
+# test security
 def generate_code_challenge(verifier):
     """Generates a code challenge for PKCE using the given code verifier."""
     challenge = hashlib.sha256(verifier.encode('utf-8')).digest()
     return base64.urlsafe_b64encode(challenge).decode('utf-8').rstrip('=')
 
+# It queries the database for SpotifyToken objects associated with the given user. If one exists, it returns the first one; otherwise, it returns None.
 def get_user_tokens(user):
     user_tokens = SpotifyToken.objects.filter(user=user)
     if user_tokens.exists():
