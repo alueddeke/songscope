@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
+import time
 
 
 # DB could be for OAuth tokens, consistent user states, user interactions etc...
@@ -10,8 +12,27 @@ class SpotifyToken(models.Model):
     access_token = models.CharField(max_length=255)
     refresh_token = models.CharField(max_length=255)
     token_type = models.CharField(max_length=50)
-    expires_in = models.IntegerField()
+    expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    expires_in = models.IntegerField()
+    
+    def is_expired(self):
+        return self.expires_at <= timezone.now()
+    
+    def update_token_info(self, access_token, refresh_token, expires_in):
+        self.access_token = access_token
+        if refresh_token:
+            self.refresh_token = refresh_token
+        self.expires_at = timezone.now() + timezone.timedelta(seconds=expires_in)
+        self.expires_in = expires_in
+        self.save()
+
+    def __str__(self):
+        return f"{self.user.username}'s Spotify Token"
+
+
+
+#potential models that could help:
 
 #Track info to store
 class Track(models.Model):

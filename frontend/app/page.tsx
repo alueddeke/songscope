@@ -1,3 +1,5 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 
@@ -11,7 +13,7 @@ export default function Home() {
         <p className="m-2">Learn how to find your next hidden gem</p>
         <div className="flex justify-end">
           <Link
-            href={`${backendUrl}/login`}
+            href={`${backendUrl}/spotify-login`}
             className="bg-dark text-white rounded-full w-28 h-28 flex items-center justify-center m-3 hover:scale-105  transition-transform duration-200"
           >
             Login
