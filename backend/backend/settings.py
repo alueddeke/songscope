@@ -35,12 +35,17 @@ ALLOWED_HOSTS = []
 
 # Application definition
 
-#adding pagination to api
+
 REST_FRAMEWORK = {
-    'DEFAULT_PAGINATION_CLASS' :  'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10
 }
-
 
 
 INSTALLED_APPS = [
@@ -60,10 +65,19 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  
 ]
 
-# If you're using session authentication, ensure this is set
-#for later production**
-SESSION_COOKIE_SAMESITE = 'None'
-SESSION_COOKIE_SECURE = True  # Use this in production with HTTPS
+# CSRF settings
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",  # Your Next.js frontend
+]
+CSRF_USE_SESSIONS = False
+CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript access to the cookie
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SECURE = False  # Set to True in production with HTTPS
+
+# Session settings
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
+SESSION_COOKIE_HTTPONLY = True
 
 LOGGING = {
     'version': 1,
