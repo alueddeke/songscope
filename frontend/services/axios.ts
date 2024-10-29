@@ -21,3 +21,20 @@ export async function get<T>(url: string): Promise<T> {
   const response = await client.get<T>(url);
   return response.data;
 }
+
+export const post = async <T>(url: string, data: any): Promise<T> => {
+  try {
+    const response = await axios.post(url, data, {
+      withCredentials: true, //for cookies
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new Error(error.response?.data?.error || "Failed to submit data");
+    }
+    throw error;
+  }
+};
