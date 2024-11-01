@@ -291,3 +291,26 @@ def get_spotify_api_client(access_token):
     """
     return spotipy.Spotify(auth=access_token)
 
+
+def get_user_name(request):
+    """Get user's name using Spotipy"""
+    try:
+        spotify_token = SpotifyToken.objects.get(user=request.user)
+        if spotify_token.is_expired():
+            spotify_token = refresh_spotify_token(spotify_token)
+        
+        sp = get_spotipy_client(spotify_token.access_token)
+        
+        # Single method call instead of raw request
+        user_name = sp.me()
+        
+        return JsonResponse({'user_name': user_name})
+        
+    except SpotifyException as e:
+        logger.error(f"Spotify API error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=e.http_status)
+    except SpotifyToken.DoesNotExist:
+        return JsonResponse({'error': 'Spotify token not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
