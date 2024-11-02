@@ -1,11 +1,8 @@
-"use client";
-
 import Image from "next/image";
 import Link from "next/link";
 
 export default function Home() {
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-  console.log(backendUrl);
   return (
     <main className="bg-brown h-screen max-w-[1300px] flex items-center justify-around p-4 gap-8 text-white mx-auto">
       <section className="p-8 w-[50%] flex justify-center">
@@ -15,7 +12,7 @@ export default function Home() {
           </h1>
           <p className="m-2 leading-relaxed text-xl font-light">
             SongScope uses advanced algorithms to find songs you’re likely to
-            really enjoy.{" "}
+            really enjoy.
           </p>
           <div className="flex">
             <Link

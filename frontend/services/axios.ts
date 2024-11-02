@@ -21,3 +21,9 @@ export async function get<T>(url: string): Promise<T> {
   const response = await client.get<T>(url);
   return response.data;
 }
+
+export async function post<T>(url: string, body: any): Promise<T> {
+  const client = getClient();
+  const response = await client.post<T>(url, body);
+  return response.data;
+}

@@ -2,14 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-.rhap_progress-indicator {
-    background-color: red;
-}
-
-svg {
-    fill: white;
-}
-
 #rhap_current-time {
     color: white
 }
