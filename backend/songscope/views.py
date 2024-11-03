@@ -326,17 +326,11 @@ def add_track_to_liked(request):
         
         sp = get_spotipy_client(spotify_token.access_token)
 
-        print("-------step 1 complete-------")
-
         payload = json.loads(request.body.decode('utf-8'))
-        track_id = payload.get("track_id")  # Use .get() to access "track_id"
+        track_id = payload.get("track_id")
 
-        print(track_id)
-
-        print("-------step 2 complete-------", track_id)
         sp.current_user_saved_tracks_add([track_id])
 
-        print("-------step 3 complete-------")
         return JsonResponse({'message': "all good"})
 
     except SpotifyException as e:
