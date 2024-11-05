@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { get } from "../../../../services/axios";
+import FeedbackButtonGroup from "../Feedback/FeedbackButtonGroup";
 
 interface Track {
   id: string;
@@ -72,6 +73,9 @@ export default function Recommendations() {
                   </p>
                 </div>
               )}
+              <div className="mt-3">
+                <FeedbackButtonGroup trackId={track.id} />
+              </div>
             </div>
           </div>
         ))}

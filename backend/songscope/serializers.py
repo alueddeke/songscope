@@ -40,3 +40,8 @@ class UserProfileSerializer(serializers.Serializer):
             child=serializers.CharField()
         )
     )
+
+
+class FeedbackSubmissionSerializer(serializers.Serializer):
+    track_id = serializers.CharField()
+    feedback_type = serializers.ChoiceField(choices=['LIKE', 'DISLIKE', 'SKIP', 'SAVE'])
