@@ -204,101 +204,6 @@ def get_user_top_artists(request):
         logger.error(f"Unexpected error: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
-# @api_view(['GET'])
-# @permission_classes([IsAuthenticated])
-# def get_track_recommendations(request):
-#     """Get personalized track recommendations using Spotipy"""
-#     try:
-#         # Get and validate Spotify token
-#         try:
-#             spotify_token = SpotifyToken.objects.get(user=request.user)
-#             if spotify_token.is_expired():
-#                 spotify_token = refresh_spotify_token(spotify_token)
-#         except SpotifyToken.DoesNotExist:
-#             logger.error(f"No Spotify token found for user {request.user.id}")
-#             return JsonResponse({'error': 'Spotify token not found'}, status=404)
-#         except Exception as e:
-#             log_api_error(e, "token refresh")
-#             return JsonResponse({'error': 'Authentication error'}, status=401)
-
-#         # Initialize Spotify client
-#         try:
-#             sp = get_spotipy_client(spotify_token.access_token)
-#         except Exception as e:
-#             log_api_error(e, "Spotify client initialization")
-#             return JsonResponse({'error': 'Failed to initialize Spotify client'}, status=500)
-
-#         # Get top tracks for seeds
-#         try:
-#             top_tracks = sp.current_user_top_tracks(
-#                 limit=5,
-#                 time_range='short_term'
-#             )
-#             if not top_tracks or 'items' not in top_tracks:
-#                 logger.warning(f"No top tracks found for user {request.user.id}")
-#                 return JsonResponse({'error': 'No top tracks available'}, status=404)
-            
-#             seed_tracks = [track['id'] for track in top_tracks['items']]
-#         except SpotifyException as e:
-#             log_spotify_error(e, "top tracks")
-#             return JsonResponse({'error': 'Failed to fetch top tracks'}, status=e.http_status)
-#         except Exception as e:
-#             log_api_error(e, "top tracks fetch")
-#             return JsonResponse({'error': 'Failed to process top tracks'}, status=500)
-
-#         # Get audio features
-#         try:
-#             audio_features = sp.audio_features(seed_tracks)
-#             if not audio_features or not any(audio_features):
-#                 logger.warning(f"No audio features found for seed tracks")
-#                 return JsonResponse({'error': 'No audio features available'}, status=404)
-#         except SpotifyException as e:
-#             log_spotify_error(e, "audio features")
-#             return JsonResponse({'error': 'Failed to fetch audio features'}, status=e.http_status)
-#         except Exception as e:
-#             log_api_error(e, "audio features fetch")
-#             return JsonResponse({'error': 'Failed to process audio features'}, status=500)
-
-#         # Calculate target features
-#         avg_features = {
-#             'target_tempo': sum(track['tempo'] for track in audio_features if track) / len(audio_features),
-#             'target_energy': sum(track['energy'] for track in audio_features if track) / len(audio_features),
-#             'target_danceability': sum(track['danceability'] for track in audio_features if track) / len(audio_features),
-#             'target_valence': sum(track['valence'] for track in audio_features if track) / len(audio_features)
-#         }
-
-#         # Get recommendations
-#         try:
-#             recommendations = sp.recommendations(
-#                 seed_tracks=seed_tracks[:5],  # Ensure we don't exceed Spotify's limit
-#                 limit=18,
-#                 **avg_features
-#             )
-#             if not recommendations or 'tracks' not in recommendations:
-#                 logger.warning("No recommendations returned from Spotify API")
-#                 return JsonResponse({'error': 'No recommendations available'}, status=404)
-#         except SpotifyException as e:
-#             log_spotify_error(e, "recommendations")
-#             return JsonResponse({'error': 'Failed to fetch recommendations'}, status=e.http_status)
-#         except Exception as e:
-#             log_api_error(e, "recommendations fetch")
-#             return JsonResponse({'error': 'Failed to process recommendations'}, status=500)
-
-#         # Process recommendations
-#         processed_tracks = [{
-#             'id': track['id'],
-#             'name': track['name'],
-#             'artist': track['artists'][0]['name'],
-#             'album': track['album']['name'],
-#             'preview_url': track.get('preview_url'),
-#             'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None
-#         } for track in recommendations['tracks']]
-
-#         return JsonResponse({'recommendations': processed_tracks})
-
-#     except Exception as e:
-#         logger.exception("Unexpected error in get_track_recommendations")
-#         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -377,7 +282,6 @@ def get_spotify_api_client(access_token):
     """
     return spotipy.Spotify(auth=access_token)
 
-<<<<<<< HEAD
 @ensure_csrf_cookie
 def get_csrf_token(request):
     return JsonResponse({'message': 'CSRF cookie set'})
@@ -440,7 +344,6 @@ def submit_feedback(request):
 
     except Exception as e:
         logger.error(f"Error submitting feedback: {str(e)}")
-=======
 @login_required
 def get_user_name(request):
     """Get user's name using Spotipy"""
@@ -489,5 +392,4 @@ def add_track_to_liked(request):
         return JsonResponse({'error': 'Spotify token not found'}, status=404)
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
->>>>>>> development
         return JsonResponse({'error': str(e)}, status=500)
