@@ -1,6 +1,6 @@
 "use client";
 import H5AudioPlayer from "react-h5-audio-player";
-import "react-h5-audio-player/lib/styles.css"
+import "react-h5-audio-player/lib/styles.css";
 
 interface AudioPlayerProps {
   src: string;
@@ -8,8 +8,8 @@ interface AudioPlayerProps {
 
 export function AudioPlayer(props: AudioPlayerProps) {
   const src = props.src;
-  if (!src){
-    return <h1>loading...</h1>
+  if (!src) {
+    return <h1>loading...</h1>;
   }
   return (
     <H5AudioPlayer
