@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+#rhap_current-time {
+    color: white
+}
+
+.rhap_total-time, .rhap_time {
+    color: white !important;
+}

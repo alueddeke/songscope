@@ -49,6 +49,7 @@ export async function get<T>(url: string): Promise<T> {
   return response.data;
 }
 
+<<<<<<< HEAD
 export async function post<T>(url: string, data: any): Promise<T> {
   try {
     const client = getClient();
@@ -70,3 +71,10 @@ export async function fetchCsrfToken(): Promise<void> {
     console.error("Error fetching CSRF token:", error);
   }
 }
+=======
+export async function post<T>(url: string, body: any): Promise<T> {
+  const client = getClient();
+  const response = await client.post<T>(url, body);
+  return response.data;
+}
+>>>>>>> development

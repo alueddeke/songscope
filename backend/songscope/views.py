@@ -1,3 +1,4 @@
+import json
 from django.shortcuts import redirect
 from django.conf import settings
 from django.http import JsonResponse
@@ -49,7 +50,7 @@ token_url = 'https://accounts.spotify.com/api/token'
 def spotify_login(request):
     client_id = settings.SPOTIFY_CLIENT_ID
     redirect_uri = settings.SPOTIFY_REDIRECT_URI
-    scope = 'user-read-private user-read-email user-top-read user-read-recently-played'
+    scope = 'user-read-private user-read-email user-top-read user-read-recently-played user-library-modify'
     authorization_base_url = 'https://accounts.spotify.com/authorize'
 
     spotify = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
@@ -376,6 +377,7 @@ def get_spotify_api_client(access_token):
     """
     return spotipy.Spotify(auth=access_token)
 
+<<<<<<< HEAD
 @ensure_csrf_cookie
 def get_csrf_token(request):
     return JsonResponse({'message': 'CSRF cookie set'})
@@ -438,4 +440,54 @@ def submit_feedback(request):
 
     except Exception as e:
         logger.error(f"Error submitting feedback: {str(e)}")
+=======
+@login_required
+def get_user_name(request):
+    """Get user's name using Spotipy"""
+    try:
+        spotify_token = SpotifyToken.objects.get(user=request.user)
+        if spotify_token.is_expired():
+            spotify_token = refresh_spotify_token(spotify_token)
+        
+        sp = get_spotipy_client(spotify_token.access_token)
+        
+        # Single method call instead of raw request
+        user_name = sp.me()
+        
+        return JsonResponse({'user_name': user_name})
+        
+    except SpotifyException as e:
+        logger.error(f"Spotify API error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=e.http_status)
+    except SpotifyToken.DoesNotExist:
+        return JsonResponse({'error': 'Spotify token not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+    
+
+def add_track_to_liked(request):
+    """Get user's name using Spotipy"""
+    try:
+        spotify_token = SpotifyToken.objects.get(user=request.user)
+        if spotify_token.is_expired():
+            spotify_token = refresh_spotify_token(spotify_token)
+        
+        sp = get_spotipy_client(spotify_token.access_token)
+
+        payload = json.loads(request.body.decode('utf-8'))
+        track_id = payload.get("track_id")
+
+        sp.current_user_saved_tracks_add([track_id])
+
+        return JsonResponse({'message': "all good"})
+
+    except SpotifyException as e:
+        logger.error(f"Spotify API error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=e.http_status)
+    except SpotifyToken.DoesNotExist:
+        return JsonResponse({'error': 'Spotify token not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+>>>>>>> development
         return JsonResponse({'error': str(e)}, status=500)

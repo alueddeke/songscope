@@ -23,6 +23,9 @@ SPOTIFY_REDIRECT_URI = config('SPOTIFY_REDIRECT_URI')
 # Frontend URL
 FRONTEND_URL = config('FRONTEND_URL')
 
+CSRF_TRUSTED_ORIGINS = ['http://localhost:3000']
+CSRF_COOKIE_SECURE = False
+
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = "django-insecure-2nagt=pfbkp%5#u*^r4bwjenk2b_3a)ly-y*656vzx%qvzv6v="
@@ -63,6 +66,11 @@ INSTALLED_APPS = [
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",  
+    "http://127.0.0.1:3000",  
+]
+
+CORS_ORIGIN_WHITELIST = [
+    "http://localhost:3000"
 ]
 
 # CSRF settings
@@ -139,7 +147,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
+    # "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
