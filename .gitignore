@@ -44,3 +44,9 @@ next-env.d.ts
 node_modules/
 **/node_modules/
 **/next-swc.darwin-arm64.node
+
+backend/db.sqlite3
+backend/Pipfile
+backend/venv/
+backend/songscope/__pycache__
+backend/backend/__pycache__
