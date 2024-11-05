@@ -39,6 +39,11 @@ urlpatterns = [
     path('api/user-recently-played/', views.get_user_recently_played, name='user_recently_played'),
     path('api/user-top-artists/', views.get_user_top_artists, name='user_top_artists'),
     path('api/recommendations/', views.get_track_recommendations, name='recommendations'),
+<<<<<<< HEAD
+    path('api/submit-feedback/', views.submit_feedback, name='submit_feedback'), 
+      path('api/csrf-token/', views.get_csrf_token, name='csrf_token'),
+=======
     path('api/get-user-name/', views.get_user_name, name='user_name'),
     path('api/add-track-to-liked/', views.add_track_to_liked, name='add_track_to_liked'),
+>>>>>>> development
 ]
