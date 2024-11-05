@@ -1,12 +1,15 @@
+import json
 from django.shortcuts import redirect
 from django.conf import settings
 from django.http import JsonResponse
 from django.contrib.auth import login
 from django.contrib.auth.models import User
-from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import SessionAuthentication
 from requests_oauthlib import OAuth2Session
 from .models import SpotifyToken
 import time
@@ -22,7 +25,14 @@ import spotipy
 from spotipy.exceptions import SpotifyException
 from spotipy.oauth2 import SpotifyOAuth
 import numpy as np
+from .models import SpotifyToken, Track, UserFeedback, UserPreferences, RecommendationLog
+from .logging_config import logger, log_api_error, log_spotify_error
+from .serializers import FeedbackSubmissionSerializer
+from .recommendation_engine import RecommendationEngine
 
+class CsrfExemptSessionAuthentication(SessionAuthentication):
+    def enforce_csrf(self, request):
+        return  # To not enforce CSRF token
 
 
 logger = logging.getLogger(__name__)
@@ -40,7 +50,7 @@ token_url = 'https://accounts.spotify.com/api/token'
 def spotify_login(request):
     client_id = settings.SPOTIFY_CLIENT_ID
     redirect_uri = settings.SPOTIFY_REDIRECT_URI
-    scope = 'user-read-private user-read-email user-top-read user-read-recently-played'
+    scope = 'user-read-private user-read-email user-top-read user-read-recently-played user-library-modify'
     authorization_base_url = 'https://accounts.spotify.com/authorize'
 
     spotify = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
@@ -194,44 +204,29 @@ def get_user_top_artists(request):
         logger.error(f"Unexpected error: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_track_recommendations(request):
-    """Get personalized track recommendations using Spotipy"""
+    """Get personalized track recommendations using the recommendation engine"""
     try:
-        spotify_token = SpotifyToken.objects.get(user=request.user)
-        if spotify_token.is_expired():
-            spotify_token = refresh_spotify_token(spotify_token)
-            
+        # Get and validate Spotify token
+        try:
+            spotify_token = SpotifyToken.objects.get(user=request.user)
+            if spotify_token.is_expired():
+                spotify_token = refresh_spotify_token(spotify_token)
+        except SpotifyToken.DoesNotExist:
+            logger.error(f"No Spotify token found for user {request.user.id}")
+            return JsonResponse({'error': 'Spotify token not found'}, status=404)
+
+        # Initialize Spotify client
         sp = get_spotipy_client(spotify_token.access_token)
-        
-        # Get top tracks for seeds
-        top_tracks = sp.current_user_top_tracks(
-            limit=5,
-            time_range='short_term'
-        )
-        
-        # Extract seed track IDs
-        seed_tracks = [track['id'] for track in top_tracks['items']]
-        
-        # Get audio features for personalization
-        audio_features = sp.audio_features(seed_tracks)
-        
-        # Calculate average features for recommendations
-        avg_features = {
-            'target_tempo': sum(track['tempo'] for track in audio_features) / len(audio_features),
-            'target_energy': sum(track['energy'] for track in audio_features) / len(audio_features),
-            'target_danceability': sum(track['danceability'] for track in audio_features) / len(audio_features),
-            'target_valence': sum(track['valence'] for track in audio_features) / len(audio_features)
-        }
-        
-        # Get recommendations with personalized parameters
-        recommendations = sp.recommendations(
-            seed_tracks=seed_tracks,
-            limit=18,
-            **avg_features
-        )
-        
+
+        # Get recommendations using the engine
+        engine = RecommendationEngine(request.user)
+        recommended_tracks = engine.get_personalized_recommendations(sp, limit=18)
+
+        # Process recommendations for frontend
         processed_tracks = [{
             'id': track['id'],
             'name': track['name'],
@@ -239,23 +234,19 @@ def get_track_recommendations(request):
             'album': track['album']['name'],
             'preview_url': track.get('preview_url'),
             'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None
-        } for track in recommendations['tracks']]
-        
+        } for track in recommended_tracks]
+
+        # Log recommendations
+        for track in processed_tracks:
+            track_obj = Track.objects.get_or_create(spotify_id=track['id'])[0]
+            RecommendationLog.log_recommendation(request.user, track_obj)
+
         return JsonResponse({'recommendations': processed_tracks})
-        
-    except SpotifyException as e:
-        logger.error(f"Spotify API error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=e.http_status)
-    except SpotifyToken.DoesNotExist:
-        return JsonResponse({'error': 'Spotify token not found'}, status=404)
+
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
-
-
-
-
-
+        logger.exception("Unexpected error in get_track_recommendations")
+        RecommendationLog.log_error(request.user, str(e))
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 @login_required
 def check_auth(request):
@@ -291,3 +282,114 @@ def get_spotify_api_client(access_token):
     """
     return spotipy.Spotify(auth=access_token)
 
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    return JsonResponse({'message': 'CSRF cookie set'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_feedback(request):
+    """Handle feedback submission and update recommendations"""
+    try:
+        serializer = FeedbackSubmissionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return JsonResponse({'error': serializer.errors}, status=400)
+
+        # Get or refresh Spotify token
+        spotify_token = SpotifyToken.objects.get(user=request.user)
+        if spotify_token.is_expired():
+            spotify_token = refresh_spotify_token(spotify_token)
+
+        sp = get_spotipy_client(spotify_token.access_token)
+        
+        # Get or create track
+        track_id = serializer.validated_data['track_id']
+        track, created = Track.objects.get_or_create(
+            spotify_id=track_id,
+            defaults={
+                'name': '',
+                'artist': '',
+                'album': ''
+            }
+        )
+
+        # Update track details if new or missing audio features
+        if created or not track.audio_features:
+            track_info = sp.track(track_id)
+            audio_features = sp.audio_features([track_id])[0]
+            artist_info = sp.artist(track_info['artists'][0]['id'])
+            
+            track.name = track_info['name']
+            track.artist = track_info['artists'][0]['name']
+            track.album = track_info['album']['name']
+            track.popularity = track_info['popularity']
+            track.audio_features = audio_features
+            track.genres = artist_info['genres']
+            track.save()
+
+        # Create feedback entry
+        feedback = UserFeedback.objects.create(
+            user=request.user,
+            track=track,
+            feedback_type=serializer.validated_data['feedback_type'],
+            track_features=track.audio_features
+        )
+
+        # Update recommendations using the engine
+        engine = RecommendationEngine(request.user)
+        engine.update_preferences(feedback)
+
+        return JsonResponse({'status': 'success'})
+
+    except Exception as e:
+        logger.error(f"Error submitting feedback: {str(e)}")
+@login_required
+def get_user_name(request):
+    """Get user's name using Spotipy"""
+    try:
+        spotify_token = SpotifyToken.objects.get(user=request.user)
+        if spotify_token.is_expired():
+            spotify_token = refresh_spotify_token(spotify_token)
+        
+        sp = get_spotipy_client(spotify_token.access_token)
+        
+        # Single method call instead of raw request
+        user_name = sp.me()
+        
+        return JsonResponse({'user_name': user_name})
+        
+    except SpotifyException as e:
+        logger.error(f"Spotify API error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=e.http_status)
+    except SpotifyToken.DoesNotExist:
+        return JsonResponse({'error': 'Spotify token not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+    
+
+def add_track_to_liked(request):
+    """Get user's name using Spotipy"""
+    try:
+        spotify_token = SpotifyToken.objects.get(user=request.user)
+        if spotify_token.is_expired():
+            spotify_token = refresh_spotify_token(spotify_token)
+        
+        sp = get_spotipy_client(spotify_token.access_token)
+
+        payload = json.loads(request.body.decode('utf-8'))
+        track_id = payload.get("track_id")
+
+        sp.current_user_saved_tracks_add([track_id])
+
+        return JsonResponse({'message': "all good"})
+
+    except SpotifyException as e:
+        logger.error(f"Spotify API error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=e.http_status)
+    except SpotifyToken.DoesNotExist:
+        return JsonResponse({'error': 'Spotify token not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
