@@ -25,7 +25,7 @@ async function getUserName() {
 
   if (!response.ok) {
     // Handle various error cases
-    if (response.status === 404) {
+    if (response.status > 300) {
       redirect('/') // Token not found, redirect to login
     }
     throw new Error('Failed to fetch user data')

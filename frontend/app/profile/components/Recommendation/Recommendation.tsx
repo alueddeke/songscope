@@ -1,8 +1,10 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { AudioPlayer } from "../AudioPlayer/AudioPlayer";
-import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import { AddToLiked } from "../AddToLiked/AddToLiked";
 import FeedbackButtonGroup from "../Feedback/FeedbackButtonGroup";
+import arrow from "../../../../public/images/arrow_back.png";
 
 interface Track {
   id: string;
@@ -13,80 +15,96 @@ interface Track {
   image_url: string;
 }
 
-interface RecommendationsResponse {
-  recommendations: Track[];
-}
+export default function Recommendation() {
+  const [recommendations, setRecommendations] = useState<Track[]>([]);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
 
-async function getRecommendations() {
-  const cookieStore = cookies();
-  // Get your Django session cookie - you'll need to check the exact name
-  // It's often something like 'sessionid' or 'csrftoken'
-  const sessionCookie = cookieStore.get("sessionid");
+  // Fetch recommendations when the component mounts
+  useEffect(() => {
+    async function fetchRecommendations() {
+      const response = await fetch(
+        "http://localhost:8000/api/recommendations/",
+        {
+          method: "GET",
+          credentials: "include", // This ensures the cookies are sent with the request
+        }
+      );
 
-  if (!sessionCookie) {
-    redirect("/"); // or your login page
-  }
+      if (!response.ok) {
+        throw new Error("Failed to fetch recommendations");
+      }
 
-  const response: Response = await fetch("http://localhost:8000/api/recommendations/", {
-    headers: {
-      Cookie: `sessionid=${sessionCookie.value}`,
-      // If you're using CSRF protection, include that token too
-      // 'X-CSRFToken': csrfCookie.value
-    },
-    // Prevent caching since this is user-specific data
-    cache: "no-store",
-  });
-
-  const data: RecommendationsResponse = await response.json()
-  const recommendations = data.recommendations.filter(track => track.preview_url != null)
-
-  if (!response.ok) {
-    // Handle various error cases
-    if (response.status === 404) {
-      redirect("/"); // Token not found, redirect to login
+      const data = await response.json();
+      const filteredRecommendations = data.recommendations.filter(
+        (track: Track) => track.preview_url !== null
+      );
+      setRecommendations(filteredRecommendations);
     }
-    throw new Error("Failed to fetch user data");
+
+    fetchRecommendations().catch((err) => {
+      console.error(err);
+    });
+  }, []);
+
+  // Handle the next track
+  const nextTrack = () => {
+    if (currentIndex < recommendations.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    }
+  };
+
+  if (recommendations.length === 0) {
+    return <div>Loading...</div>;
   }
 
-  return recommendations
-}
-
-export default async function Recommendation() {
-  const recommendations: Track[] = await getRecommendations()
+  const currentTrack = recommendations[currentIndex];
 
   return (
     <div className="mx-auto flex gap-8 lg:gap-16 w-[100%] flex-col md:flex-row p-2 md:p-4 lg:p-8">
       <div className="md:w-[45%] lg:w-[55%] p-2 lg:p-0">
-        <img src={recommendations[0].image_url} />
+        <img src={currentTrack.image_url} alt={currentTrack.name} />
       </div>
 
       <div className="md:w-[55%] lg:w-[45%] flex flex-col gap-8 lg:gap-16 p-2 lg:p-0">
         <div className="flex flex-col gap-4">
           <h3 className="text-2xl lg:text-5xl text-bold text-white">
-            {recommendations[0].name}
+            {currentTrack.name}
           </h3>
           <h4 className="text-xl text-bold text-white">
-            {recommendations[0].artist}
+            {currentTrack.artist}
           </h4>
-          <h4 className="text-xl text-bold text-white">
-            {recommendations[0].album}
-          </h4>
+          <h4 className="text-xl text-bold text-white">{currentTrack.album}</h4>
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="text-white font-light text-sm">preview</span>
-          <AudioPlayer src={recommendations[0].preview_url}/>
+          <span className="text-white font-light text-sm">Preview</span>
+          <AudioPlayer src={currentTrack.preview_url} />
         </div>
 
         <div className="flex gap-4 lg:gap-8 flex-col lg:flex-row">
-          <AddToLiked id={recommendations[0].id}/>
-          <a href={`https://open.spotify.com/track/${recommendations[0].id}`}
-            className="bg-black rounded-full flex-1 text-white py-2 text-center hover:scale-105  transition-transform duration-200"
+          <AddToLiked id={currentTrack.id} />
+          <a
+            href={`https://open.spotify.com/track/${currentTrack.id}`}
+            className="bg-black rounded-full flex-1 text-white py-2 text-center hover:scale-105 transition-transform duration-200"
           >
             Open in Spotify
           </a>
+        </div>
 
-          <FeedbackButtonGroup trackId={recommendations[0].id}/>
+        <div className="flex justify-between  mt-auto">
+
+          <FeedbackButtonGroup trackId={currentTrack.id} />
+
+          <div className="flex gap-4">
+            <button onClick={nextTrack} className="flex items-center hover:scale-105 transition duration-300 gap-1">
+              <span className="text-green">Next Suggestion</span>
+              <img
+                src="/images/arrow_back.png"
+                alt="down arrow icon"
+                className="w-6 rotate-[270deg]"
+              />
+            </button>
+          </div>
         </div>
       </div>
     </div>

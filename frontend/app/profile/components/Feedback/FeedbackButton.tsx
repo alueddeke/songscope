@@ -17,7 +17,7 @@ export const feedbackConfig = {
     label: "Like this song",
     hoverColor: "hover:bg-green-100",
     selectedColor: "bg-green-100",
-    iconColor: "text-green-600",
+    iconColor: "text-white",
     selectedIconColor: "text-green-700",
   },
   DISLIKE: {
