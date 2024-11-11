@@ -27,6 +27,7 @@ export default function TopArtists() {
           "api/user-top-artists/"
         );
         setTopArtists(response.top_artists);
+        console.log(response.top_artists)
         setLoading(false);
       } catch (err) {
         console.error(err);

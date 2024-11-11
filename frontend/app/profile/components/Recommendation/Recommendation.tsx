@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { AudioPlayer } from "../AudioPlayer/AudioPlayer";
 import { AddToLiked } from "../AddToLiked/AddToLiked";
 import FeedbackButtonGroup from "../Feedback/FeedbackButtonGroup";
-import arrow from "../../../../public/images/arrow_back.png";
 
 interface Track {
   id: string;
@@ -38,6 +37,8 @@ export default function Recommendation() {
       const filteredRecommendations = data.recommendations.filter(
         (track: Track) => track.preview_url !== null
       );
+
+      console.log(filteredRecommendations)
       setRecommendations(filteredRecommendations);
     }
 
@@ -85,9 +86,10 @@ export default function Recommendation() {
           <AddToLiked id={currentTrack.id} />
           <a
             href={`https://open.spotify.com/track/${currentTrack.id}`}
-            className="bg-black rounded-full flex-1 text-white py-2 text-center hover:scale-105 transition-transform duration-200"
+            className="bg-green rounded-full flex items-center justify-center gap-2 flex-1 text-black py-2 text-center hover:scale-105 transition-transform duration-200"
           >
-            Open in Spotify
+            <img  className="w-5 h-5" src="/images/spotify-logo.png"/> 
+            <span>Open in Spotify</span>
           </a>
         </div>
 

@@ -5,7 +5,6 @@ import {
   FeedbackButton,
   SelectableFeedbackType,
 } from "./FeedbackButton";
-import Alert from "./Alert";
 import { post } from "@/services/axios";
 import { useState } from "react";
 
@@ -76,34 +75,6 @@ export default function FeedbackButtonGroup({ trackId }: { trackId: string }) {
           isSelected={selectedFeedback === "DISLIKE"}
           disabled={status.loading}
         />
-        {/* <FeedbackButton
-          feedbackType="SKIP"
-          onSubmit={handleSubmit}
-          disabled={status.loading}
-        /> */}
-        {/* <FeedbackButton
-          feedbackType="SAVE"
-          onSubmit={handleSubmit}
-          isSelected={selectedFeedback === "SAVE"}
-          disabled={status.loading}
-        /> */}
-      </div>
-
-      <div className="transition-all duration-300">
-        {status.error && (
-          <Alert
-            variant="destructive"
-            title="Error"
-            description={status.error}
-          />
-        )}
-
-        {status.success && (
-          <Alert
-            title="Success"
-            description="Your feedback has been recorded"
-          />
-        )}
       </div>
     </div>
   );
