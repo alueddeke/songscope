@@ -61,12 +61,12 @@ export default function Recommendation() {
   const currentTrack = recommendations[currentIndex];
 
   return (
-    <div className="mx-auto flex gap-8 lg:gap-16 w-[100%] flex-col md:flex-row p-2 md:p-4 lg:p-8">
+    <div className="mx-auto flex gap-8 lg:gap-12 w-[100%] flex-col md:flex-row p-2 md:p-4 lg:p-8">
       <div className="md:w-[45%] lg:w-[55%] p-2 lg:p-0">
         <img src={currentTrack.image_url} alt={currentTrack.name} />
       </div>
 
-      <div className="md:w-[55%] lg:w-[45%] flex flex-col gap-8 lg:gap-16 p-2 lg:p-0">
+      <div className="md:w-[55%] lg:w-[45%] flex flex-col gap-8 lg:gap-12 p-2 lg:p-0">
         <div className="flex flex-col gap-4">
           <h3 className="text-2xl lg:text-5xl text-bold text-white">
             {currentTrack.name}
@@ -77,7 +77,7 @@ export default function Recommendation() {
           <h4 className="text-xl text-bold text-white">{currentTrack.album}</h4>
         </div>
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 border border-white p-2">
           <span className="text-white font-light text-sm">Preview</span>
           <AudioPlayer src={currentTrack.preview_url} />
         </div>
