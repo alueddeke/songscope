@@ -17,7 +17,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className + " bg-brown"}>
+      <body className={inter.className + " bg-stone-950"}>
         <CsrfProvider>{children}</CsrfProvider>
       </body>
     </html>

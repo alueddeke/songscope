@@ -52,6 +52,8 @@
 //     </div>
 //   );
 // }
+
+'use client'
 import {
   FeedbackType,
   FeedbackButton,

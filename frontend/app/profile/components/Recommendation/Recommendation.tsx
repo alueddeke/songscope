@@ -2,6 +2,7 @@ import { AudioPlayer } from "../AudioPlayer/AudioPlayer";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { AddToLiked } from "../AddToLiked/AddToLiked";
+import FeedbackButtonGroup from "../Feedback/FeedbackButtonGroup";
 
 interface Track {
   id: string;
@@ -84,6 +85,8 @@ export default async function Recommendation() {
           >
             Open in Spotify
           </a>
+
+          <FeedbackButtonGroup trackId={recommendations[0].id}/>
         </div>
       </div>
     </div>
