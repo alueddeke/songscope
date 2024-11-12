@@ -1,65 +1,10 @@
-// import {
-//   FeedbackType,
-//   FeedbackButton,
-//   SelectableFeedbackType,
-// } from "./FeedbackButton";
-// import { useState } from "react";
-// import { post } from "@/services/axios";
-
-// interface FeedbackResponse {
-//   status: string;
-// }
-
-// export default function FeedbackButtonGroup({ trackId }: { trackId: string }) {
-//   const [selectedFeedback, setSelectedFeedback] =
-//     useState<SelectableFeedbackType | null>(null);
-
-//   const handleSubmit = async (feedbackType: FeedbackType) => {
-//     try {
-//       await post<FeedbackResponse>("/api/submit-feedback/", {
-//         track_id: trackId,
-//         feedback_type: feedbackType,
-//       });
-
-//       // Only update selection for non-skip feedback
-//       if (feedbackType !== "SKIP") {
-//         setSelectedFeedback(feedbackType as SelectableFeedbackType);
-//       }
-//     } catch (error) {
-//       console.error("Error submitting feedback:", error);
-//       //could show a toast notification
-//       throw error;
-//     }
-//   };
-//   return (
-//     <div className="flex gap-2 items-center">
-//       <FeedbackButton
-//         feedbackType="LIKE"
-//         onSubmit={handleSubmit}
-//         isSelected={selectedFeedback === "LIKE"}
-//       />
-//       <FeedbackButton
-//         feedbackType="DISLIKE"
-//         onSubmit={handleSubmit}
-//         isSelected={selectedFeedback === "DISLIKE"}
-//       />
-//       <FeedbackButton feedbackType="SKIP" onSubmit={handleSubmit} />
-//       <FeedbackButton
-//         feedbackType="SAVE"
-//         onSubmit={handleSubmit}
-//         isSelected={selectedFeedback === "SAVE"}
-//       />
-//     </div>
-//   );
-// }
-
 'use client'
+
 import {
   FeedbackType,
   FeedbackButton,
   SelectableFeedbackType,
 } from "./FeedbackButton";
-import Alert from "./Alert";
 import { post } from "@/services/axios";
 import { useState } from "react";
 
@@ -115,8 +60,9 @@ export default function FeedbackButtonGroup({ trackId }: { trackId: string }) {
   };
 
   return (
-    <div className="space-y-2">
+    <div className="">
       <div className="flex gap-2 items-center">
+        <span className="text-white">Good Suggestion?</span>
         <FeedbackButton
           feedbackType="LIKE"
           onSubmit={handleSubmit}
@@ -129,34 +75,6 @@ export default function FeedbackButtonGroup({ trackId }: { trackId: string }) {
           isSelected={selectedFeedback === "DISLIKE"}
           disabled={status.loading}
         />
-        <FeedbackButton
-          feedbackType="SKIP"
-          onSubmit={handleSubmit}
-          disabled={status.loading}
-        />
-        <FeedbackButton
-          feedbackType="SAVE"
-          onSubmit={handleSubmit}
-          isSelected={selectedFeedback === "SAVE"}
-          disabled={status.loading}
-        />
-      </div>
-
-      <div className="min-h-[50px] transition-all duration-300">
-        {status.error && (
-          <Alert
-            variant="destructive"
-            title="Error"
-            description={status.error}
-          />
-        )}
-
-        {status.success && (
-          <Alert
-            title="Success"
-            description="Your feedback has been recorded"
-          />
-        )}
       </div>
     </div>
   );
