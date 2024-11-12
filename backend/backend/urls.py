@@ -19,21 +19,28 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
 from songscope import views
-from songscope.views import spotify_login, spotify_callback, user_profile
+from songscope.views import spotify_login, spotify_callback
+
 
 # this is where you would define routes - your get one, post one, etc...
 # if you register your viewset to routers, it does all this for you
 # less code but good for most cases, if you need more control, do it manually
 router = routers.DefaultRouter()
-router.register(r'users', views.UserViewSet)
-router.register(r'groups', views.GroupViewSet)
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include(router.urls)),
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
-    path('login/', spotify_login, name='spotify-login'),
-    path('callback/', spotify_callback, name='spotify-callback'),
-    path('profile/', user_profile, name='user-profile'),
-    path('api/user-playlists/', views.get_user_playlists, name='user_playlists'),
+    path('spotify-login/', views.spotify_login, name='spotify-login'),
+    path('spotify/callback/', views.spotify_callback, name='spotify-callback'),
+    path('api/check-auth/', views.check_auth, name='check_auth'),
+    path('api/user-top-tracks/', views.get_user_top_tracks, name='user_top_tracks'),
+    path('api/user-recently-played/', views.get_user_recently_played, name='user_recently_played'),
+    path('api/user-top-artists/', views.get_user_top_artists, name='user_top_artists'),
+    path('api/recommendations/', views.get_track_recommendations, name='recommendations'),
+    path('api/submit-feedback/', views.submit_feedback, name='submit_feedback'), 
+    path('api/csrf-token/', views.get_csrf_token, name='csrf_token'),
+    path('api/get-user-name/', views.get_user_name, name='user_name'),
+    path('api/add-track-to-liked/', views.add_track_to_liked, name='add_track_to_liked'),
 ]
