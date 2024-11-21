@@ -132,7 +132,7 @@ export default function TopArtists() {
                 style={{ backgroundImage: `url(${track.image_url})` }}
                 className="bg-white shadow-md rounded-lg p-4 bg-cover bg-center h-64 w-64 relative"
               >
-                <h3 className="font-regular text-lg bg-white/80 rounded-full text-center p-2">
+                <h3 className="font-regular text-base bg-white/80 rounded-full text-center p-2">
                   {track.name}
                 </h3>
 

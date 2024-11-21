@@ -68,7 +68,7 @@ export default function FeedbackButtonGroup({ trackId }: { trackId: string }) {
   return (
     <div className="">
       <div className="flex gap-2 items-center">
-        <span className="text-white">Good Suggestion?</span>
+        <span className="text-white">Good Recommendation?</span>
         <FeedbackButton
           feedbackType="LIKE"
           onSubmit={handleSubmit}

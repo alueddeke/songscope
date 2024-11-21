@@ -38,7 +38,7 @@ export default function Recommendation() {
         (track: Track) => track.preview_url !== null
       );
 
-      console.log(filteredRecommendations)
+      console.log(filteredRecommendations);
       setRecommendations(filteredRecommendations);
     }
 
@@ -88,25 +88,30 @@ export default function Recommendation() {
             href={`https://open.spotify.com/track/${currentTrack.id}`}
             className="bg-green rounded-full flex items-center justify-center gap-2 flex-1 text-black py-2 text-center hover:scale-105 transition-transform duration-200"
           >
-            <img  className="w-5 h-5" src="/images/spotify-logo.png"/> 
+            <img className="w-5 h-5" src="/images/spotify-logo.png" />
             <span>Open in Spotify</span>
           </a>
         </div>
 
-        <div className="flex justify-between  mt-auto">
-
+        <div className="flex justify-between  mt-auto items-center">
           <FeedbackButtonGroup trackId={currentTrack.id} />
 
-          <div className="flex gap-4">
-            <button onClick={nextTrack} className="flex items-center hover:scale-105 transition duration-300 gap-1">
-              <span className="text-green">Next Suggestion</span>
-              <img
-                src="/images/arrow_back.png"
-                alt="down arrow icon"
-                className="w-6 rotate-[270deg]"
-              />
-            </button>
-          </div>
+          {currentIndex <= recommendations.length - 2 ? (
+            <div className="flex gap-4">
+              <button
+                onClick={nextTrack}
+                className="flex items-center hover:scale-105 transition duration-300 gap-1"
+              >
+                <span className="text-green">Next Recommendation</span>
+                <img
+                  src="/images/arrow_back.png"
+                  alt="down arrow icon"
+                  className="w-6 rotate-[270deg]"
+                />
+              </button>
+            </div>
+          ): 
+          <div className="text-gray-300">End of Recommendations</div>}
         </div>
       </div>
     </div>
