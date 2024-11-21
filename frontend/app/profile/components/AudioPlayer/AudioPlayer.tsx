@@ -14,7 +14,7 @@ export function AudioPlayer(props: AudioPlayerProps) {
   }
   return (
     <H5AudioPlayer
-      src={src}
+      
       className="rounded-sm"
       style={{
         backgroundColor: "black",
@@ -27,6 +27,9 @@ export function AudioPlayer(props: AudioPlayerProps) {
       showJumpControls={false}
       loop={false}
       autoPlay={false}
+      preload="metadata"
+      src={src}
+      autoPlayAfterSrcChange={false}
     />
   );
 }

@@ -77,7 +77,7 @@ export default function Recommendation() {
           <h4 className="text-xl text-bold text-white">{currentTrack.album}</h4>
         </div>
 
-        <div className="flex flex-col gap-2 border border-white p-2">
+        <div className="flex flex-col gap-2 p-2">
           <span className="text-white font-light text-sm">Preview</span>
           <AudioPlayer src={currentTrack.preview_url} />
         </div>
