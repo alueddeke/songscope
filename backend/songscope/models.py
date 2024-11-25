@@ -56,6 +56,7 @@ class Track(models.Model):
 
 
 class UserFeedback(models.Model):
+    """Captures and stores user feedback based on specific tracks."""
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     track = models.ForeignKey(Track, on_delete=models.CASCADE)
     feedback_type = models.CharField(
@@ -69,21 +70,24 @@ class UserFeedback(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     # Store audio features at the time of feedback for learning
-    track_features = models.JSONField(null=True, blank=True)
+    track_features = models.JSONField(null=True, blank=True) # Inherit audio features of the song the user gives feedback to
 
 
 class UserPreferences(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    # Grabbing everything needed from the Django database first
+    user = models.ForeignKey(User, on_delete=models.CASCADE) 
     # Weights for different audio features
-    feature_weights = models.JSONField(default=dict)
+    feature_weights = models.JSONField(default=dict) # Looking for this in the Django database first, if don't have create empty dict
     genre_preferences = models.JSONField(default=dict)
     updated_at = models.DateTimeField(auto_now=True)
 
     def update_weights(self, feedback, track_features):
-        """Update weights based on user feedback"""
+        """Update feature_weights database based on user feedback."""
         if not self.feature_weights:
+
+            # REMINDER: feature_weights not the same as track_feature values
             self.feature_weights = {
-                'acousticness': 1.0,
+                'acousticness': 1.0, # Should the weights be normalized to 1 here? 
                 'danceability': 1.0,
                 'energy': 1.0,
                 'instrumentalness': 1.0,
@@ -91,7 +95,7 @@ class UserPreferences(models.Model):
                 'tempo': 1.0
             }
         
-        # Adjust weights based on feedback type
+        # Adjust weights based on feedback type (ADJUSTMENT IN PERCENTAGE)
         adjustment = {
             'LIKE': 0.1,   # Increase weight for liked features
             'DISLIKE': -0.1,  # Decrease weight for disliked features
@@ -100,10 +104,18 @@ class UserPreferences(models.Model):
         }.get(feedback.feedback_type, 0)
 
         # Update weights for each feature
-        for feature, value in track_features.items():
+        for feature, value in track_features.items(): # original values in track features can get pretty high though (tempo ~190 for some songs)
             if feature in self.feature_weights:
-                # Normalize the adjustment based on feature value
-                normalized_adjustment = adjustment * value
+                """This method of weight adjustment won't be really balanced for each feature. That is we might see more effect for
+                track_features that naturally have lower values, e.g. -1 < track_features < 1. This is due to the clamping operation in the last
+                line of the code below, reinforcing any feature_weight adjustments to be between 0.1 and 2.0. Example: Features like tempo naturally have
+                a bigger range of values, thus a value adjustment of 2.0 may not be noticeable at all."""
+
+                # Normalize the adjustment based on feature value <- doesn't really matter what percentage of adjustment gets applied (normalized)
+                # if they will get the clamping operation (specifically for unnormalized track_features, e.g. tempo) 
+                normalized_adjustment = adjustment * value # Weights are adjusted according to the original song feature value in percentages 
+
+                # Should add an if 
                 self.feature_weights[feature] = max(0.1, min(2.0, 
                     self.feature_weights[feature] + normalized_adjustment))
         

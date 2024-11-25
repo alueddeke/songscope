@@ -22,14 +22,18 @@ class RecommendationEngine:
                 created_at__gte=timezone.now() - timedelta(days=30)
             )
             
-            # Calculate feature targets based on positive feedback
+            """Only filtering for positive feedback (LIKE, SAVE) since we are trying to recommend similar songs, not 
+            songs that the user dislikes."""
+
+            # Filter for positive feedbacks only in recent UserFeedback
             positive_feedback = recent_feedback.filter(feedback_type__in=['LIKE', 'SAVE'])
             
+            # Calculate feature targets based on positive feedback
             if positive_feedback.exists():
                 targets = self._calculate_targets(positive_feedback)
                 logger.info(f"Calculated targets from feedback: {targets}")
             else:
-                # Fall back to user's top tracks
+                # Fall back to user's top tracks <- Calculate average features from users top 5 tracks
                 logger.info("No feedback found, falling back to top tracks")
                 top_tracks = sp_client.current_user_top_tracks(limit=5)
                 track_ids = [track['id'] for track in top_tracks['items']]
@@ -43,7 +47,7 @@ class RecommendationEngine:
             # Add target prefix to feature names for Spotify API
             formatted_targets = {f"target_{k}": v for k, v in targets.items()}
             
-            # Get recommendations from Spotify
+            # Get recommendations from Spotify (using seed tracks and feature values in targets?)
             recommendations = sp_client.recommendations(
                 seed_tracks=seed_tracks[:5],
                 limit=limit,
@@ -57,9 +61,15 @@ class RecommendationEngine:
             raise
     
     def _calculate_targets(self, feedback_queryset) -> Dict[str, float]:
-        """Calculate average features from feedback"""
+        """Calculate average feature values from UserFeedback.
+        
+        Note: This function just averages the features we care about in UserPreferences for x number of days of certain
+        feedback types (like, dislike, save, skip).
+        """
+
         try:
-            features = self.preferences.feature_weights.keys()
+            # self.preferences is from UserPreferences
+            features = self.preferences.feature_weights.keys() # Grab the category of feature_weights we adjust for users 
             targets = {}
             
             for feature in features:
@@ -76,19 +86,13 @@ class RecommendationEngine:
         except Exception as e:
             logger.error(f"Error calculating targets: {str(e)}")
             # Fall back to default features
-            return {
-                'acousticness': 0.5,
-                'danceability': 0.5,
-                'energy': 0.5,
-                'instrumentalness': 0.5,
-                'valence': 0.5,
-                'tempo': 120.0
-            }
+            return self._get_default_targets()
     
     def _calculate_targets_from_features(self, features: List[Dict]) -> Dict[str, float]:
         """Calculate average features from Spotify audio features response"""
         valid_features = [f for f in features if f is not None]
         if not valid_features:
+            # If no features from top 5 user tracks are ones we care about in UserPreferences then use default target 
             return self._get_default_targets()
             
         return {
@@ -137,8 +141,10 @@ class RecommendationEngine:
             top_tracks = sp_client.current_user_top_tracks(limit=num_seeds)
             return [track['id'] for track in top_tracks['items']]
     
-    def update_preferences(self, feedback: UserFeedback):
-        """Update user preferences based on feedback"""
+    def update_preferences(self, feedback: UserFeedback): # Same as UserPreferences.update_weights()?
+        """Update user preferences based on feedback. Includes a learning rate based on number of feedback count in the last 30 days by user.
+        
+        Note: Basically same as the UserPreferences.update_weights() method but implemented into RecommendationEngine."""
         try:
             if not self.preferences.feature_weights:
                 self.preferences.feature_weights = {
@@ -164,7 +170,8 @@ class RecommendationEngine:
                 user=self.user,
                 created_at__gte=timezone.now() - timedelta(days=30)
             ).count()
-            learning_rate = 1.0 / max(1, feedback_count)
+            # The more feedback from the user, the lower the learning rate is
+            learning_rate = 1.0 / max(1, feedback_count) # Should be opposite? 
             
             # Update weights
             for feature, value in feedback.track_features.items():

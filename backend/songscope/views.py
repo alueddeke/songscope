@@ -336,6 +336,9 @@ def submit_feedback(request):
             track_features=track.audio_features
         )
 
+        """Is a user preference being updated right after the UserFeedback database is being created above? Should we accumulate some
+        songs first before it is being updated?"""
+
         # Update recommendations using the engine
         engine = RecommendationEngine(request.user)
         engine.update_preferences(feedback)
