@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import Image from 'next/image'
 import { redirect } from 'next/navigation'
 import Recommendation from './components/Recommendation/Recommendation'
+import TopArtists from './components/TopArtists/TopArtists'
 
 async function getUserName() {
   const cookieStore = cookies()
@@ -59,6 +60,10 @@ const UserProfile = async () => {
 
       <section className="min-h-[100vh] flex justify-center items-center">
         <Recommendation />
+      </section>
+
+      <section className="py-64">
+        <TopArtists/>
       </section>
     </div>
   );

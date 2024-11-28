@@ -6,7 +6,7 @@ import {
   SelectableFeedbackType,
 } from "./FeedbackButton";
 import { post } from "@/services/axios";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface FeedbackResponse {
   status: string;
@@ -21,6 +21,12 @@ interface FeedbackStatus {
 export default function FeedbackButtonGroup({ trackId }: { trackId: string }) {
   const [selectedFeedback, setSelectedFeedback] =
     useState<SelectableFeedbackType | null>(null);
+
+  useEffect(() => {
+    setSelectedFeedback(null)
+
+  }, [trackId])
+
   const [status, setStatus] = useState<FeedbackStatus>({
     loading: false,
     error: null,
@@ -62,7 +68,7 @@ export default function FeedbackButtonGroup({ trackId }: { trackId: string }) {
   return (
     <div className="">
       <div className="flex gap-2 items-center">
-        <span className="text-white">Good Suggestion?</span>
+        <span className="text-white">Good Recommendation?</span>
         <FeedbackButton
           feedbackType="LIKE"
           onSubmit={handleSubmit}

@@ -15,7 +15,7 @@ export const feedbackConfig = {
   LIKE: {
     icon: ThumbsUp,
     label: "Like this song",
-    hoverColor: "hover:bg-green text-black",
+    hoverColor: "hover:bg-green text-black hover:scale-110",
     selectedColor: "text-white bg-green",
     iconColor: "text-white",
     selectedIconColor: "text-green-700",
@@ -23,10 +23,10 @@ export const feedbackConfig = {
   DISLIKE: {
     icon: ThumbsDown,
     label: "Dislike this song",
-    hoverColor: "hover:bg-red hover:text-white",
-    selectedColor: "bg-red-100",
+    hoverColor: "hover:bg-red-700 hover:text-white hover:scale-110",
+    selectedColor: "bg-red-700 border-white text-white",
     iconColor: "text-white",
-    selectedIconColor: "text-red-700",
+    selectedIconColor: "text-white",
   },
   SKIP: {
     icon: Forward,

@@ -190,7 +190,8 @@ def get_user_top_artists(request):
             'id': artist['id'],
             'name': artist['name'],
             'genres': artist['genres'],
-            'popularity': artist['popularity']
+            'popularity': artist['popularity'],
+            'images': artist['images']
         } for artist in top_artists['items']]
         
         return JsonResponse({'top_artists': artists_data})
