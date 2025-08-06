@@ -14,7 +14,7 @@ async function getUserName() {
     redirect('/') // or your login page
   }
 
-  const response = await fetch('http://localhost:8000/api/get-user-name/', {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/get-user-name/`, {
     headers: {
       'Cookie': `sessionid=${sessionCookie.value}`,
       // If you're using CSRF protection, include that token too

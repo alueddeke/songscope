@@ -21,10 +21,10 @@ export default function Home() {
             >
               <span className="pr-2">Login with Spotify</span>
               <Image
-                src="/images/spotify-logo.png" // path relative to the public folder
-                alt="collage of album art"
-                width= "20"
-                height="20" 
+                src="/images/spotify-logo.png"
+                alt="Spotify logo"
+                width={20}
+                height={20} 
                 priority
               />
             </Link>
@@ -33,10 +33,11 @@ export default function Home() {
       </section>
       <section className="border-2 border-black w-[50%] relative min-h-[90%]">
         <Image
-          src="/images/albums.png" // path relative to the public folder
+          src="/images/albums.png"
           alt="collage of album art"
-          layout="fill" // This makes the image fill the parent container
-          objectFit="cover"
+          fill
+          sizes="(max-width: 768px) 50vw, 50vw"
+          style={{ objectFit: "cover" }}
           priority
         />
       </section>

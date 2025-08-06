@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import os
+import logging
 from .models import SpotifyToken
 import requests
 from django.utils import timezone
@@ -10,6 +11,8 @@ from datetime import timedelta
 from django.conf import settings
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+
+logger = logging.getLogger(__name__)
 
 
 def get_spotipy_client(access_token):

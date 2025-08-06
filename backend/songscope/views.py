@@ -43,14 +43,14 @@ if settings.OAUTHLIB_INSECURE_TRANSPORT:
 client_id = settings.SPOTIFY_CLIENT_ID
 client_secret = settings.SPOTIFY_CLIENT_SECRET
 redirect_uri = settings.SPOTIFY_REDIRECT_URI
-scope = 'user-read-private user-read-email user-top-read'
+scope = 'user-read-private user-read-email user-top-read user-read-recently-played user-library-modify user-read-playback-state'
 authorization_base_url = 'https://accounts.spotify.com/authorize'
 token_url = 'https://accounts.spotify.com/api/token'
 
 def spotify_login(request):
     client_id = settings.SPOTIFY_CLIENT_ID
     redirect_uri = settings.SPOTIFY_REDIRECT_URI
-    scope = 'user-read-private user-read-email user-top-read user-read-recently-played user-library-modify'
+    scope = 'user-read-private user-read-email user-top-read user-read-recently-played user-library-modify user-read-playback-state'
     authorization_base_url = 'https://accounts.spotify.com/authorize'
 
     spotify = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
@@ -208,6 +208,34 @@ def get_user_top_artists(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def check_spotify_token(request):
+    """Check if Spotify token is valid and refresh if needed"""
+    try:
+        spotify_token = SpotifyToken.objects.get(user=request.user)
+        
+        # Check if token is expired
+        if spotify_token.is_expired():
+            logger.info(f"Token expired for user {request.user.id}, refreshing...")
+            spotify_token = refresh_spotify_token(spotify_token)
+        
+        # Test the token with a simple API call
+        sp = get_spotipy_client(spotify_token.access_token)
+        user_info = sp.current_user()
+        
+        return JsonResponse({
+            'valid': True,
+            'user_id': user_info['id'],
+            'display_name': user_info.get('display_name', 'Unknown')
+        })
+        
+    except SpotifyToken.DoesNotExist:
+        return JsonResponse({'valid': False, 'error': 'No Spotify token found'}, status=404)
+    except Exception as e:
+        logger.error(f"Error checking Spotify token: {str(e)}")
+        return JsonResponse({'valid': False, 'error': str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_track_recommendations(request):
     """Get personalized track recommendations using the recommendation engine"""
     try:
@@ -226,6 +254,10 @@ def get_track_recommendations(request):
         # Get recommendations using the engine
         engine = RecommendationEngine(request.user)
         recommended_tracks = engine.get_personalized_recommendations(sp, limit=18)
+
+        if not recommended_tracks:
+            logger.warning("No recommendations returned from engine")
+            return JsonResponse({'recommendations': []})
 
         # Process recommendations for frontend
         processed_tracks = [{

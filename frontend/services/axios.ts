@@ -65,8 +65,12 @@ export async function post<T>(url: string, data: any): Promise<T> {
 
 export async function fetchCsrfToken(): Promise<void> {
   try {
+    console.log("Fetching CSRF token from:", `${BACKEND_URL}/api/csrf-token/`);
     await get("/api/csrf-token/");
+    console.log("CSRF token fetched successfully");
   } catch (error) {
     console.error("Error fetching CSRF token:", error);
+    // Don't throw the error - CSRF token is optional for some operations
+    // The backend will handle requests without CSRF tokens appropriately
   }
 }

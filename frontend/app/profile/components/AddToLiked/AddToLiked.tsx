@@ -15,7 +15,7 @@ export function AddToLiked(props: AddToLikedProps) {
     setLiked(true)
     try {
       const response: Response = await post(
-        "http://localhost:8000/api/add-track-to-liked/",
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/add-track-to-liked/`,
         { track_id: track_id }
       );
       console.log(response);

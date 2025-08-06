@@ -31,10 +31,15 @@ class RecommendationEngine:
             else:
                 # Fall back to user's top tracks
                 logger.info("No feedback found, falling back to top tracks")
-                top_tracks = sp_client.current_user_top_tracks(limit=5)
-                track_ids = [track['id'] for track in top_tracks['items']]
-                audio_features = sp_client.audio_features(track_ids)
-                targets = self._calculate_targets_from_features(audio_features)
+                try:
+                    top_tracks = sp_client.current_user_top_tracks(limit=5)
+                    track_ids = [track['id'] for track in top_tracks['items']]
+                    audio_features = sp_client.audio_features(track_ids)
+                    targets = self._calculate_targets_from_features(audio_features)
+                except Exception as e:
+                    logger.error(f"Error getting top tracks: {str(e)}")
+                    # Use default targets if Spotify API fails
+                    targets = self._get_default_targets()
             
             # Get seed tracks
             seed_tracks = self._get_seed_tracks(sp_client)
@@ -43,18 +48,29 @@ class RecommendationEngine:
             # Add target prefix to feature names for Spotify API
             formatted_targets = {f"target_{k}": v for k, v in targets.items()}
             
-            # Get recommendations from Spotify
-            recommendations = sp_client.recommendations(
-                seed_tracks=seed_tracks[:5],
-                limit=limit,
-                **formatted_targets
-            )
-            
-            return recommendations['tracks']
+            try:
+                # Simplify the recommendation call - only use essential parameters
+                recommendations = sp_client.recommendations(
+                    seed_tracks=seed_tracks[:5],
+                    limit=limit
+                )
+                return recommendations['tracks']
+            except Exception as e:
+                logger.error(f"Error getting recommendations: {str(e)}")
+                # Try with just seed tracks and no targets
+                try:
+                    recommendations = sp_client.recommendations(
+                        seed_tracks=seed_tracks[:3],
+                        limit=limit
+                    )
+                    return recommendations['tracks']
+                except Exception as e2:
+                    logger.error(f"Error with simplified recommendations: {str(e2)}")
+                    return []
             
         except Exception as e:
             logger.error(f"Error in get_personalized_recommendations: {str(e)}")
-            raise
+            return []
     
     def _calculate_targets(self, feedback_queryset) -> Dict[str, float]:
         """Calculate average features from feedback"""
@@ -125,17 +141,24 @@ class RecommendationEngine:
             
             # If we need more seeds, get from top tracks
             if len(seed_tracks) < num_seeds:
-                remaining_seeds = num_seeds - len(seed_tracks)
-                top_tracks = sp_client.current_user_top_tracks(limit=remaining_seeds)
-                seed_tracks.extend(track['id'] for track in top_tracks['items'])
+                try:
+                    remaining_seeds = num_seeds - len(seed_tracks)
+                    top_tracks = sp_client.current_user_top_tracks(limit=remaining_seeds)
+                    seed_tracks.extend(track['id'] for track in top_tracks['items'])
+                except Exception as e:
+                    logger.error(f"Error getting top tracks for seeds: {str(e)}")
             
-            return seed_tracks[:num_seeds]
+            return seed_tracks[:num_seeds] if seed_tracks else []
             
         except Exception as e:
             logger.error(f"Error getting seed tracks: {str(e)}")
             # Fall back to user's top tracks only
-            top_tracks = sp_client.current_user_top_tracks(limit=num_seeds)
-            return [track['id'] for track in top_tracks['items']]
+            try:
+                top_tracks = sp_client.current_user_top_tracks(limit=num_seeds)
+                return [track['id'] for track in top_tracks['items']]
+            except Exception as e2:
+                logger.error(f"Error getting fallback top tracks: {str(e2)}")
+                return []
     
     def update_preferences(self, feedback: UserFeedback):
         """Update user preferences based on feedback"""

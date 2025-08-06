@@ -126,9 +126,8 @@ export default function TopArtists() {
 
         {!isArtists &&
           topTracks.map((track, index) => (
-            <>
-              <li
-                key={track.id}
+            <li
+              key={track.id}
                 style={{ backgroundImage: `url(${track.image_url})` }}
                 className="bg-white shadow-md rounded-lg p-4 bg-cover bg-center h-64 w-64 relative"
               >
@@ -169,7 +168,6 @@ export default function TopArtists() {
                   </h2>
                 )}
               </li>
-            </>
           ))}
       </ul>
     </div>

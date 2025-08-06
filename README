@@ -1,0 +1,548 @@
+##Initial notes and project structure
+- the goal of this project is to use spotify user listening data to provide accurate daily recommendations for what they should listen to next using machine learning
+- this project began initially by heavily leveraging a spotify endpoint that was later removed by spotify
+- the result is an app currently in transition to a new way to provide recommendations
+
+## 1. Project Structure
+
+- **Frontend**: Next.js application
+- **Backend**: Django application with Django REST Framework
+
+## 2. Backend Structure and Functionality
+
+### a) Models (models.py)
+- `SpotifyToken`: Stores user's Spotify OAuth tokens
+- `Track`: Stores information about individual tracks
+- `RecommendationLog`: Logs track recommendations for users
+
+### b) Views (views.py)
+- `spotify_login`: Initiates the Spotify OAuth flow
+- `spotify_callback`: Handles the OAuth callback from Spotify
+- `get_user_top_tracks`: Fetches and returns the user's top tracks from Spotify
+- `check_auth`: Verifies if the user is authenticated
+
+### c) Utils (utils.py)
+- Contains utility functions for token management and Spotify API interactions
+
+### d) URLs (urls.py)
+- Defines the API endpoints and routes them to appropriate views
+
+### e) Settings (settings.py)
+- Configures the Django application, including database settings, installed apps, and Spotify API credentials
+
+## 3. Authentication Flow
+
+1. User accesses `/spotify-login/` endpoint
+2. Backend redirects to Spotify's authorization page
+3. User grants permission, Spotify redirects to `/spotify/callback/`
+4. Backend exchanges authorization code for access and refresh tokens
+5. Tokens stored in `SpotifyToken` model, associated with user
+6. User logged in and redirected to frontend profile page
+
+## 4. Token Management
+
+- Backend handles token refresh automatically when needed
+- `refresh_spotify_token` function in utils.py responsible for refreshing expired tokens
+
+## 5. API Endpoints
+
+- `/api/check-auth/`: Verifies user authentication
+- `/api/user-top-tracks/`: Fetches user's top tracks from Spotify
+
+## 6. Top Tracks Retrieval Process
+
+1. Check user authentication
+2. Retrieve user's Spotify token
+3. Refresh token if necessary
+4. Request top tracks from Spotify's API
+5. Process and return data to frontend
+
+## 7. Frontend-Backend Interaction
+
+- Frontend uses Axios for HTTP requests to backend API endpoints
+- Backend processes requests, interacts with Spotify API, returns responses
+
+## 8. Data Flow
+
+### User authentication:
+Frontend -> Backend -> Spotify -> Backend -> Frontend
+
+### Fetching top tracks:
+Frontend request -> Backend -> Spotify API -> Backend processing -> Frontend display
+
+## 9. Security Considerations
+
+- Django's built-in authentication system used
+- Spotify API credentials stored securely in backend (environment variables)
+- Frontend never directly accesses Spotify API; all requests routed through backend
+
+## 10. Scalability and Future Features
+
+- Structure allows easy addition of new features:
+  - Implementing recommendation system
+  - Adding user feedback on recommendations
+  - Expanding user profile with more Spotify data
+
+## 11. Error Handling
+
+- Backend includes basic error handling for API requests and token management
+- Frontend (TopTracks component) handles potential errors from backend, displaying appropriate messages
+
+## Summary
+
+This application leverages Django's robust backend capabilities for Spotify authentication, API interactions, and data processing, while the Next.js frontend focuses on user interface and experience. The backend acts as a secure intermediary between the frontend and Spotify's API, handling sensitive operations like token management and data retrieval. This architecture ensures a clear separation of concerns, with the backend handling complex logic and data management, and the frontend focusing on data presentation to the user.
+
+
+Frontend (Next.js application):
+
+1. `app/`: This directory contains the main application files for a Next.js 13+ project using the App Router.
+    - `layout.tsx`: Defines the main layout structure for your application.
+    - `page.tsx`: Likely contains the main page component of your application.
+2. `public/`: Stores static assets like images (soundwave.svg, soundwave.webp, soundwave2.webp).
+3. `styles/`: Contains global styles for your application (globals.css).
+4. Configuration files:
+    - `next.config.mjs`: Next.js configuration file.
+    - `tailwind.config.ts`: Tailwind CSS configuration.
+    - `tsconfig.json`: TypeScript configuration.
+    - `postcss.config.mjs`: PostCSS configuration (likely for Tailwind).
+
+Backend (Django application):
+
+1. `backend/`: This is the main Django project directory.
+    - `settings.py`: Contains Django project settings.
+    - `urls.py`: Defines the main URL routing for the project.
+    - `asgi.py` and `wsgi.py`: Entry points for ASGI and WSGI servers.
+2. `songscope/`: This appears to be your main Django app.
+    - `models.py`: Defines database models.
+    - `views.py`: Contains view functions or classes.
+    - `serializers.py`: Likely used for API serialization (possibly with Django REST Framework).
+    - `utils.py`: Contains utility functions.
+    - `admin.py`: Configures the Django admin interface.
+3. `manage.py`: Django's command-line utility for administrative tasks.
+4. `requirements.txt`: Lists Python dependencies for the project.
+5. `Pipfile` and `Pipfile.lock`: Used by Pipenv for managing Python dependencies.
+
+
+
+
+**Notes**
+
+Rate Limiting: Be aware that Spotify has rate limits. You'll need to handle these in your backend to avoid exceeding them.
+
+
+auth user 
+
+
+**To Do - tell me the status of these to dos**
+- fix types in userplaylist component 
+	- clarify next.js folder structure, what is a page vs a component, how to implement each
+	- how do I make sure the pages are accessible after the login
+	- see if we can display some playlists here
+- **Machine Learning start**
+	- add new view in py
+	- add the url for this view - what should it be, how are these structured
+	- need a front end component to display the data - a table? 
+
+
+**Machine learning enhancements**
+
+As you progress, you can enhance your recommendation system:
+
+1. Collaborative Filtering: Compare user preferences to find similar users and recommend tracks they like.
+2. Matrix Factorization: Use techniques like Singular Value Decomposition (SVD) to identify latent features in user-item interactions.
+3. Deep Learning: Implement neural networks to capture complex patterns in user behavior and music features.
+4. Hybrid Approaches: Combine content-based and collaborative filtering for more accurate recommendations.
+
+To implement these more advanced techniques, you'll need to:
+
+1. Set up a data pipeline to continuously collect and update user data.
+2. Use a machine learning library like scikit-learn or TensorFlow.
+3. Create a separate service for model training and prediction.
+4. Implement A/B testing to compare different recommendation algorithms.
+
+Remember, building a sophisticated recommendation system is a complex task that requires ongoing refinement and testing.
+
+Next Steps:
+
+1. Implement the basic features (displaying playlists, getting recommendations).
+2. Start collecting and storing user data in your database.
+3. Experiment with simple content-based recommendations.
+4. Gradually introduce more complex algorithms as you learn and gather more data.
+
+This process will give you a solid foundation to build upon and allow you to incrementally improve your recommendation system over time.
+
+
+##HERE is the approach i had tried to implement afterwards
+## 1. User Authentication and Initial Data Retrieval
+
+1.1. User Login
+   - User navigates to your website and clicks "Login with Spotify" button.
+   - Frontend initiates OAuth flow by redirecting to Spotify's authorization page.
+   - User grants necessary permissions on Spotify's page.
+   - Spotify redirects back to your website with an authorization code.
+
+Implementation:
+```javascript
+// Frontend (React)
+const handleLogin = () => {
+  window.location = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${REDIRECT_URI}&scope=${SCOPES}`;
+};
+```
+
+1.2. Token Management
+   - Backend receives the authorization code from the redirect.
+   - Exchange code for access and refresh tokens using Spotify API.
+   - Store tokens securely in the database (SpotifyToken model).
+
+Implementation:
+```python
+# Backend (Django)
+@api_view(['GET'])
+def spotify_callback(request):
+    code = request.GET.get('code')
+    tokens = exchange_code_for_tokens(code)
+    user = get_or_create_user(tokens)
+    login(request, user)
+    return redirect('dashboard')
+
+def exchange_code_for_tokens(code):
+    response = requests.post('https://accounts.spotify.com/api/token', data={
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': REDIRECT_URI,
+        'client_id': CLIENT_ID,
+        'client_secret': CLIENT_SECRET,
+    })
+    return response.json()
+```
+
+1.3. Initial Data Fetch
+   - After successful authentication, fetch user's Spotify data:
+     - Recently played tracks (last 50 tracks)
+     - User's top tracks and artists (short-term, last 4 weeks)
+
+Implementation:
+```python
+def fetch_user_data(access_token):
+    headers = {'Authorization': f'Bearer {access_token}'}
+    recent_tracks = requests.get('https://api.spotify.com/v1/me/player/recently-played?limit=50', headers=headers).json()
+    top_tracks = requests.get('https://api.spotify.com/v1/me/top/tracks?time_range=short_term', headers=headers).json()
+    top_artists = requests.get('https://api.spotify.com/v1/me/top/artists?time_range=short_term', headers=headers).json()
+    return recent_tracks, top_tracks, top_artists
+```
+
+## 2. Dashboard Display
+
+2.1. Data Processing
+   - Process fetched data to extract relevant information:
+     - Most played songs (top 10)
+     - Top artists
+     - Recently played tracks
+
+Implementation:
+```python
+def process_user_data(recent_tracks, top_tracks, top_artists):
+    most_played = [{'name': track['name'], 'artist': track['artists'][0]['name']} for track in top_tracks['items'][:10]]
+    recent = [{'name': item['track']['name'], 'artist': item['track']['artists'][0]['name']} for item in recent_tracks['items'][:10]]
+    top_artists = [artist['name'] for artist in top_artists['items'][:5]]
+    return {'most_played': most_played, 'recent': recent, 'top_artists': top_artists}
+```
+
+2.2. Dashboard Render
+   - Send processed data to frontend.
+   - Render dashboard with user's Spotify data.
+
+Implementation:
+```javascript
+// Frontend (React)
+function Dashboard({ userData }) {
+  return (
+    <div>
+      <h2>Your Top Tracks</h2>
+      <ul>
+        {userData.most_played.map(track => (
+          <li key={track.name}>{track.name} by {track.artist}</li>
+        ))}
+      </ul>
+      {/* Similar sections for recent tracks and top artists */}
+    </div>
+  );
+}
+```
+
+## 3. Recommendation Sign-up
+
+3.1. Sign-up UI
+   - Display a button or form for users to sign up for daily recommendations.
+
+Implementation:
+```javascript
+function RecommendationSignup() {
+  const [isSignedUp, setIsSignedUp] = useState(false);
+
+  const handleSignup = async () => {
+    const response = await fetch('/api/signup-for-recommendations', { method: 'POST' });
+    if (response.ok) {
+      setIsSignedUp(true);
+    }
+  };
+
+  return (
+    <div>
+      {!isSignedUp ? (
+        <button onClick={handleSignup}>Sign up for Daily Recommendations</button>
+      ) : (
+        <p>You're signed up! Click "Find My Song" to get your daily recommendation.</p>
+      )}
+    </div>
+  );
+}
+```
+
+3.2. Backend Processing
+   - When user signs up, update their profile in the database to indicate they want recommendations.
+
+Implementation:
+```python
+@api_view(['POST'])
+def signup_for_recommendations(request):
+    user_profile = request.user.profile
+    user_profile.wants_recommendations = True
+    user_profile.save()
+    return Response({'status': 'success'})
+```
+
+## 4. Daily Recommendation Process
+
+4.1. Recommendation Request
+   - User clicks "Find My Song" button on the website.
+   - Frontend sends request to backend for a recommendation.
+
+Implementation:
+```javascript
+function GetRecommendation() {
+  const [recommendation, setRecommendation] = useState(null);
+
+  const fetchRecommendation = async () => {
+    const response = await fetch('/api/get-recommendation');
+    const data = await response.json();
+    setRecommendation(data);
+  };
+
+  return (
+    <div>
+      <button onClick={fetchRecommendation}>Find My Song</button>
+      {recommendation && (
+        <div>
+          <h3>Your Daily Recommendation:</h3>
+          <p>{recommendation.name} by {recommendation.artist}</p>
+          {/* Add play button or link to Spotify */}
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+4.2. Backend Processing
+   - Check if user has received a recommendation in the last 24 hours.
+   - If not, generate a new recommendation.
+
+4.3. Data Retrieval
+   - Fetch user's recent Spotify data (similar to initial fetch, but focus on data since last recommendation).
+
+4.4. Feature Extraction
+   - Process recent listening data to extract relevant features.
+
+Implementation:
+```python
+def extract_features(recent_tracks, top_tracks):
+    features = {
+        'avg_tempo': np.mean([track['audio_features']['tempo'] for track in recent_tracks]),
+        'avg_energy': np.mean([track['audio_features']['energy'] for track in recent_tracks]),
+        'top_genres': get_top_genres(top_tracks),
+        # Add more features as needed
+    }
+    return features
+```
+
+4.5. User Analysis (Instead of Segmentation)
+   - Analyze user's listening patterns to identify preferences.
+   - Note: We're replacing clustering with a more individualized analysis, as we're dealing with a single user at a time.
+
+Implementation:
+```python
+def analyze_user_preferences(features, recent_tracks):
+    preferences = {
+        'preferred_tempo_range': (features['avg_tempo'] - 10, features['avg_tempo'] + 10),
+        'preferred_energy': features['avg_energy'],
+        'top_genres': features['top_genres'][:3],
+        'favorite_artists': get_top_artists(recent_tracks)[:5],
+    }
+    return preferences
+```
+
+4.6. Recommendation Generation
+   - Use Spotify's Recommendation API with user's preferences.
+   - Apply any constraints based on user's listening history.
+
+Implementation:
+```python
+def get_spotify_recommendation(preferences, access_token):
+    params = {
+        'seed_genres': ','.join(preferences['top_genres']),
+        'target_tempo': preferences['preferred_tempo_range'][0],
+        'target_energy': preferences['preferred_energy'],
+        'limit': 10  # Get 10 recommendations to choose from
+    }
+    headers = {'Authorization': f'Bearer {access_token}'}
+    response = requests.get('https://api.spotify.com/v1/recommendations', params=params, headers=headers)
+    return response.json()['tracks']
+```
+
+4.7. Recommendation Refinement
+   - Score received recommendations based on user preferences.
+   - Select the highest-scoring track that hasn't been recommended before.
+
+Implementation:
+```python
+def refine_recommendations(recommendations, preferences, previous_recommendations):
+    scored_recommendations = [(track, score_track(track, preferences)) for track in recommendations]
+    sorted_recommendations = sorted(scored_recommendations, key=lambda x: x[1], reverse=True)
+    
+    for track, score in sorted_recommendations:
+        if track['id'] not in previous_recommendations:
+            return track
+    
+    # If all have been recommended before, return the highest scored
+    return sorted_recommendations[0][0]
+
+def score_track(track, preferences):
+    score = 0
+    score += 1 if track['tempo'] in preferences['preferred_tempo_range'] else 0
+    score += 1 if abs(track['energy'] - preferences['preferred_energy']) < 0.1 else 0
+    score += 2 if track['artists'][0]['name'] in preferences['favorite_artists'] else 0
+    return score
+```
+
+4.8. Store Recommendation
+   - Save the recommended track to the user's history.
+
+Implementation:
+```python
+def save_recommendation(user, track):
+    Recommendation.objects.create(
+        user=user,
+        track_id=track['id'],
+        track_name=track['name'],
+        artist_name=track['artists'][0]['name']
+    )
+```
+
+4.9. Return Recommendation
+   - Send the recommended track info back to the frontend for display.
+
+## 5. User Feedback and Improvement
+
+5.1. Feedback Collection
+   - Provide options for user to give feedback on the recommendation (e.g., thumbs up/down).
+
+Implementation:
+```javascript
+function Feedback({ trackId }) {
+  const submitFeedback = async (isPositive) => {
+    await fetch('/api/submit-feedback', {
+      method: 'POST',
+      body: JSON.stringify({ trackId, isPositive }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={() => submitFeedback(true)}>👍</button>
+      <button onClick={() => submitFeedback(false)}>👎</button>
+    </div>
+  );
+}
+```
+
+5.2. Feedback Processing
+   - Store user feedback and use it to adjust future recommendation strategies.
+
+Implementation:
+```python
+@api_view(['POST'])
+def submit_feedback(request):
+    feedback = Feedback.objects.create(
+        user=request.user,
+        track_id=request.data['trackId'],
+        is_positive=request.data['isPositive']
+    )
+    adjust_user_preferences(request.user, feedback)
+    return Response({'status': 'success'})
+
+def adjust_user_preferences(user, feedback):
+    # Logic to adjust user preferences based on feedback
+    pass
+```
+
+## 6. Periodic Tasks
+
+6.1. Token Refresh
+   - Implement a periodic task to refresh Spotify access tokens before they expire.
+
+Implementation:
+```python
+from celery import shared_task
+
+@shared_task
+def refresh_spotify_tokens():
+    expired_tokens = SpotifyToken.objects.filter(expires_at__lt=timezone.now())
+    for token in expired_tokens:
+        refresh_spotify_token(token)
+
+def refresh_spotify_token(token):
+    # Logic to refresh the token using Spotify API
+    pass
+```
+
+6.2. Data Cleanup
+   - Periodically remove old recommendation and feedback data to comply with data retention policies.
+
+Implementation:
+```python
+@shared_task
+def cleanup_old_data():
+    thirty_days_ago = timezone.now() - timezone.timedelta(days=30)
+    Recommendation.objects.filter(created_at__lt=thirty_days_ago).delete()
+    Feedback.objects.filter(created_at__lt=thirty_days_ago).delete()
+```
+
+This revised system flow provides a detailed roadmap for implementing your Spotify-based website recommendation system. It covers the entire process from user login to displaying personalized recommendations and collecting feedback. The flow is designed for a single-user login system with on-demand recommendations, as per your specifications.
+
+Key points to note:
+1. The system now focuses on individual user analysis rather than clustering.
+2. Recommendations are generated on-demand when the user clicks "Find My Song".
+3. The dashboard displays the user's top tracks, artists, and recently played songs.
+4. User feedback is collected and used to refine future recommendations.
+5. Periodic tasks handle token refresh and data cleanup to maintain system health and compliance.
+
+To implement this system, you'll need to:
+1. Set up the frontend using React (or your preferred framework).
+2. Implement the backend using Django (as shown in the examples).
+3. Set up a database to store user tokens, recommendations, and feedback.
+4. Implement the Spotify API integration for authentication and data retrieval.
+5. Develop the recommendation algorithm as outlined in the flow.
+6. Set up periodic tasks for token refresh and data cleanup.
+
+Remember to regularly review Spotify's API terms and conditions to ensure ongoing compliance.
+
+Potential Concerns for Compliance:
+
+1. Data Retention Period:
+    - The flow includes a task to clean up data older than 30 days, which is good. However, Spotify's terms might require a shorter retention period for some types of data.
+2. Extent of Stored Track Data:
+    - Be cautious about storing extensive metadata or audio features for tracks. The flow seems to use this data for analysis but doesn't explicitly state it's being stored long-term, which is good.
+3. Aggregate Data:
+    - The flow appears to focus on individual user data rather than creating large-scale aggregate datasets, which aligns well with Spotify's terms.
