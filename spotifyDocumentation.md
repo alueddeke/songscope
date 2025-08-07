@@ -53,6 +53,8 @@ Get User's Saved Tracks
 Save Tracks for Current User
 Remove User's Saved Tracks
 Check User's Saved Tracks
+
+THESE ENDPOINTS DO NOT WORK DO NOT USE THEM:
 Get Several Tracks' Audio Features
 Get Track's Audio Features
 Get Track's Audio Analysis

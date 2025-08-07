@@ -240,31 +240,29 @@ class TrackDiscoveryEngine:
                 logger.debug(f"Artist {artist_id} not found or inaccessible: {str(e)}")
                 return []
             
-            # Get related artists
-            related_artists = sp_client.artist_related_artists(artist_id)
-            
-            recommendations = []
-            for artist in related_artists['artists'][:limit]:
-                # Get top track from this artist
-                try:
-                    top_tracks = sp_client.artist_top_tracks(artist['id'], country='US')
-                    if top_tracks['tracks']:
-                        track = top_tracks['tracks'][0]
-                        recommendations.append({
-                            'id': track['id'],
-                            'name': track['name'],
-                            'artist': track['artists'][0]['name'],
-                            'album': track['album']['name'],
-                            'preview_url': track.get('preview_url'),
-                            'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
-                            'source': 'related_artist',
-                            'popularity': track.get('popularity', 0)
-                        })
-                except Exception as e:
-                    logger.warning(f"Could not get top track for related artist {artist['name']}: {str(e)}")
-                    continue
-            
-            return recommendations
+            # Instead of related artists (deprecated), get more tracks from the same artist
+            # This provides variety while using working endpoints
+            try:
+                top_tracks = sp_client.artist_top_tracks(artist_id, country='US')
+                
+                recommendations = []
+                for track in top_tracks['tracks'][:limit]:
+                    recommendations.append({
+                        'id': track['id'],
+                        'name': track['name'],
+                        'artist': track['artists'][0]['name'],
+                        'album': track['album']['name'],
+                        'preview_url': track.get('preview_url'),
+                        'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
+                        'source': 'artist_variety',
+                        'popularity': track.get('popularity', 0)
+                    })
+                
+                return recommendations
+                
+            except Exception as e:
+                logger.warning(f"Could not get top tracks for artist {artist_id}: {str(e)}")
+                return []
             
         except Exception as e:
             logger.warning(f"Could not get related artists for artist {artist_id}: {str(e)}")
@@ -309,7 +307,7 @@ class TrackDiscoveryEngine:
             'recently_played': 1,
             'artist_top_tracks': 2,
             'album_tracks': 1,
-            'related_artist': 2
+            'artist_variety': 2
         }
         
         filtered_tracks.sort(key=lambda x: source_priority.get(x.get('source', 0), 0), reverse=True)

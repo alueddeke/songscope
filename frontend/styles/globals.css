@@ -9,3 +9,19 @@
 .rhap_total-time, .rhap_time {
     color: white !important;
 }
+
+/* Animation for notifications */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -10px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+}

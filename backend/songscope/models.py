@@ -158,6 +158,8 @@ class UserProfile(models.Model):
     """
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     data = models.JSONField(default=dict)
+    recommendation_cache = models.JSONField(default=list)  # Store up to 50 recommendations
+    cache_last_updated = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -224,4 +226,86 @@ class UserProfile(models.Model):
     def update_weights(self, new_weights):
         """Update recommendation weights"""
         self.data['recommendation_weights'] = new_weights
+        self.save()
+    
+    def add_to_cache(self, recommendations):
+        """Add new recommendations to cache (max 50)"""
+        # Add new recommendations to the beginning
+        self.recommendation_cache = recommendations + self.recommendation_cache
+        
+        # Keep only the first 50
+        if len(self.recommendation_cache) > 50:
+            self.recommendation_cache = self.recommendation_cache[:50]
+        
+        # Reset position to 0 to start from the NEW recommendations
+        # This ensures user sees fresh tracks first
+        self.data['cache_position'] = 0
+        
+        self.cache_last_updated = timezone.now()
+        self.save()
+    
+    def get_from_cache(self, count=10):
+        """Get recommendations from cache using sliding window"""
+        if not self.recommendation_cache:
+            return []
+        
+        # Use a sliding window approach to cycle through different tracks
+        # Get the current position from the data field
+        current_position = self.data.get('cache_position', 0)
+        
+        # If position is beyond cache size, reset to beginning
+        if current_position >= len(self.recommendation_cache):
+            current_position = 0
+            self.data['cache_position'] = 0
+        
+        # Calculate the end position
+        end_position = current_position + count
+        
+        # If we need to wrap around, get tracks from beginning
+        if end_position > len(self.recommendation_cache):
+            # Get remaining tracks from current position
+            remaining = self.recommendation_cache[current_position:]
+            # Get tracks from beginning to fill the rest
+            needed = count - len(remaining)
+            from_beginning = self.recommendation_cache[:needed]
+            result = remaining + from_beginning
+            # Update position to where we ended
+            self.data['cache_position'] = needed
+        else:
+            # Get tracks from current position
+            result = self.recommendation_cache[current_position:end_position]
+            # Update position
+            self.data['cache_position'] = end_position
+        
+        self.save()
+        return result
+    
+    def is_cache_fresh(self, max_age_hours=1):
+        """Check if cache is fresh (less than max_age_hours old)"""
+        from datetime import timedelta
+        return self.cache_last_updated > timezone.now() - timedelta(hours=max_age_hours)
+    
+    def cache_size(self):
+        """Get current cache size"""
+        return len(self.recommendation_cache)
+    
+    def get_cache_stats(self):
+        """Get cache statistics for debugging"""
+        current_position = self.data.get('cache_position', 0)
+        return {
+            'cache_size': len(self.recommendation_cache),
+            'current_position': current_position,
+            'tracks_remaining': len(self.recommendation_cache) - current_position,
+            'has_wrapped': current_position >= len(self.recommendation_cache)
+        }
+    
+    def reset_cache_position(self):
+        """Reset cache position to beginning"""
+        self.data['cache_position'] = 0
+        self.save()
+    
+    def clear_cache(self):
+        """Clear all cached recommendations"""
+        self.recommendation_cache = []
+        self.data['cache_position'] = 0
         self.save()

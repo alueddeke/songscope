@@ -5,11 +5,12 @@ import {
   FeedbackButton,
   SelectableFeedbackType,
 } from "./FeedbackButton";
-import { post } from "@/services/axios";
+import { post, get } from "@/services/axios";
 import { useEffect, useState } from "react";
 
 interface FeedbackResponse {
   status: string;
+  action?: string; // Added for like/unlike action
 }
 
 interface FeedbackStatus {
@@ -18,14 +19,20 @@ interface FeedbackStatus {
   success: boolean;
 }
 
-export default function FeedbackButtonGroup({ trackId }: { trackId: string }) {
+interface FeedbackButtonGroupProps {
+  trackId: string;
+  onTrackRemoved?: () => void; // Callback when track is removed (for thumbs down)
+}
+
+export default function FeedbackButtonGroup({ trackId, onTrackRemoved }: FeedbackButtonGroupProps) {
   const [selectedFeedback, setSelectedFeedback] =
     useState<SelectableFeedbackType | null>(null);
 
   useEffect(() => {
-    setSelectedFeedback(null)
-
-  }, [trackId])
+    setSelectedFeedback(null);
+    // Check if user has already liked this track
+    checkInitialLikeState();
+  }, [trackId]);
 
   const [status, setStatus] = useState<FeedbackStatus>({
     loading: false,
@@ -33,17 +40,50 @@ export default function FeedbackButtonGroup({ trackId }: { trackId: string }) {
     success: false,
   });
 
+  const [notification, setNotification] = useState<string | null>(null);
+
+  const checkInitialLikeState = async () => {
+    try {
+      const response = await get<{liked: boolean}>(`/api/check-track-feedback/${trackId}/`);
+      if (response.liked) {
+        setSelectedFeedback("LIKE");
+      }
+    } catch (error) {
+      console.error("Error checking initial like state:", error);
+      // Don't show error to user, just assume not liked
+    }
+  };
+
   const handleSubmit = async (feedbackType: FeedbackType) => {
     setStatus({ loading: true, error: null, success: false });
 
     try {
-      await post<FeedbackResponse>("/api/submit-feedback/", {
+      const response = await post<FeedbackResponse>("/api/submit-feedback/", {
         track_id: trackId,
         feedback_type: feedbackType,
       });
 
-      if (feedbackType !== "SKIP") {
-        setSelectedFeedback(feedbackType as SelectableFeedbackType);
+      if (feedbackType === "DISLIKE") {
+        // Remove track from UI and show notification
+        setNotification("Song removed");
+        setTimeout(() => {
+          setNotification(null);
+          onTrackRemoved?.(); // Callback to remove track from parent component
+        }, 1500);
+      } else if (feedbackType === "LIKE") {
+        // Handle like/unlike based on backend response
+        if (response.action === 'removed') {
+          // User unliked the track
+          setSelectedFeedback(null);
+          setNotification("Song unliked");
+        } else {
+          // User liked the track
+          setSelectedFeedback("LIKE");
+          setNotification("Song liked");
+        }
+        setTimeout(() => {
+          setNotification(null);
+        }, 1500);
       }
 
       setStatus({ loading: false, error: null, success: true });
@@ -66,7 +106,14 @@ export default function FeedbackButtonGroup({ trackId }: { trackId: string }) {
   };
 
   return (
-    <div className="">
+    <div className="relative">
+      {/* Notification */}
+      {notification && (
+        <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-green text-black px-4 py-2 rounded-lg shadow-lg z-10 animate-fade-in">
+          {notification}
+        </div>
+      )}
+
       <div className="flex gap-2 items-center">
         <span className="text-white">Good Recommendation?</span>
         <FeedbackButton

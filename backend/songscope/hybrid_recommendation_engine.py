@@ -62,37 +62,61 @@ class HybridRecommendationEngine:
         
         return profile
     
-    def get_recommendations(self, limit=20) -> List[Dict]:
+    def get_recommendations(self, limit=20, force_fresh=False) -> List[Dict]:
         """
         Get personalized recommendations using hybrid approach.
         Combines multiple strategies based on user profile.
+        
+        Args:
+            limit: Number of recommendations to return
+            force_fresh: If True, force fresh data update regardless of timing
         """
         try:
-            logger.info(f"Getting hybrid recommendations for user {self.user.id}")
+            logger.info(f"Getting dynamic recommendations for user {self.user.id} (force_fresh: {force_fresh})")
             
-            # Check if profile needs updating or is empty
-            if self.profile.needs_update() or not self._has_base_data():
-                logger.info("Profile needs updating or is empty, refreshing data...")
+            # Check cache first (unless force_fresh is True)
+            if not force_fresh:
+                cached_recommendations = self.profile.get_from_cache(limit)
+                if cached_recommendations:
+                    logger.info(f"Returning {len(cached_recommendations)} recommendations from cache")
+                    return cached_recommendations
+            
+            # If no cache or force_fresh, generate new recommendations
+            logger.info("Cache miss or force_fresh - generating new recommendations")
+            
+            # Clear cache when generating fresh recommendations to avoid repeats
+            if force_fresh:
+                logger.info("🔄 FORCE FRESH: Clearing cache and fetching fresh listening data...")
+                self.profile.clear_cache()
+            
+            # Force fresh update if requested or if daily update is needed
+            if force_fresh or self._should_update_profile() or not self._has_base_data():
+                if force_fresh:
+                    logger.info("🔄 FORCE FRESH: Fetching fresh listening data...")
+                else:
+                    logger.info("Daily profile update triggered - fetching fresh listening data...")
                 self._update_profile_data()
+            else:
+                logger.info("Using existing profile data (updated within 24 hours)")
             
             # Get recommendations from multiple sources
             all_recommendations = []
             
             # Strategy 1: Playlist Mining (get more variety)
             if self._check_rate_limit():
-                playlist_recs = self._get_playlist_recommendations(limit * 2)  # Get more to shuffle
+                playlist_recs = self._get_playlist_recommendations(limit * 3)  # Get more to shuffle
                 all_recommendations.extend(playlist_recs)
                 logger.info(f"Playlist mining found {len(playlist_recs)} recommendations")
             
             # Strategy 2: Artist Network (get more variety)
             if self._check_rate_limit():
-                artist_recs = self._get_artist_network_recommendations(limit * 2)  # Get more to shuffle
+                artist_recs = self._get_artist_network_recommendations(limit * 3)  # Get more to shuffle
                 all_recommendations.extend(artist_recs)
                 logger.info(f"Artist network found {len(artist_recs)} recommendations")
             
             # Strategy 3: Contextual Recommendations (get more variety)
             if self._check_rate_limit():
-                contextual_recs = self._get_contextual_recommendations(limit * 2)  # Get more to shuffle
+                contextual_recs = self._get_contextual_recommendations(limit * 3)  # Get more to shuffle
                 all_recommendations.extend(contextual_recs)
                 logger.info(f"Contextual analysis found {len(contextual_recs)} recommendations")
             
@@ -105,13 +129,23 @@ class HybridRecommendationEngine:
             unique_recommendations = self._remove_duplicates(all_recommendations)
             scored_recommendations = self._score_recommendations(unique_recommendations)
             
-            # Shuffle recommendations to add variety
+            # Add more randomization for variety
             import random
-            random.shuffle(scored_recommendations)
+            # Shuffle multiple times for better randomization
+            for _ in range(3):
+                random.shuffle(scored_recommendations)
             
-            # Always filter out Spotify liked songs
+            # Add some randomness to scores for more variety
+            for rec in scored_recommendations:
+                rec['score'] += random.uniform(-0.1, 0.1)  # Add small random variation
+            
+            # Re-sort by new scores
+            scored_recommendations.sort(key=lambda x: x['score'], reverse=True)
+            
+            # Filter out liked songs and recently played
             scored_recommendations = self._filter_out_liked_songs(scored_recommendations)
-            logger.info(f"Filtered out Spotify liked songs, {len(scored_recommendations)} tracks remaining")
+            scored_recommendations = self._filter_out_recently_played(scored_recommendations)
+            logger.info(f"After filtering, {len(scored_recommendations)} tracks remaining")
             
             # Return top recommendations
             final_recommendations = scored_recommendations[:limit]
@@ -121,7 +155,9 @@ class HybridRecommendationEngine:
                 logger.info(f"Only have {len(final_recommendations)} recommendations, getting more from fallback...")
                 fallback_recs = self._get_fallback_recommendations(limit * 2)
                 
-                # Fallback recommendations are already filtered
+                # Filter fallback recommendations too
+                fallback_recs = self._filter_out_liked_songs(fallback_recs)
+                fallback_recs = self._filter_out_recently_played(fallback_recs)
                 
                 # Add fallback recommendations
                 for rec in fallback_recs:
@@ -144,11 +180,15 @@ class HybridRecommendationEngine:
                         rec_copy['duplicated'] = True
                         final_recommendations.append(rec_copy)
             
-            logger.info(f"Generated {len(final_recommendations)} hybrid recommendations")
+            logger.info(f"Generated {len(final_recommendations)} dynamic recommendations")
             
             # Debug: Log what we're returning
             for i, rec in enumerate(final_recommendations[:3]):  # Log first 3
                 logger.info(f"Recommendation {i+1}: {rec['name']} by {rec['artist']} (source: {rec['source']}, popularity: {rec.get('popularity', 'N/A')})")
+            
+            # Add to cache
+            self.profile.add_to_cache(final_recommendations)
+            logger.info(f"Added {len(final_recommendations)} recommendations to cache (cache size: {self.profile.cache_size()})")
             
             return final_recommendations
             
@@ -166,6 +206,15 @@ class HybridRecommendationEngine:
         base_data = self.profile.data.get('base_data', {})
         return bool(base_data.get('top_artists') or base_data.get('saved_tracks') or base_data.get('playlists'))
     
+    def _should_update_profile(self) -> bool:
+        """Check if profile needs daily update"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        last_update = self.profile.updated_at
+        days_since_update = (timezone.now() - last_update).days
+        return days_since_update >= 1
+    
     def _update_profile_data(self):
         """Update user profile with fresh data from Spotify"""
         try:
@@ -179,7 +228,7 @@ class HybridRecommendationEngine:
             
             # Update base data with error handling
             self._update_top_artists(sp)
-            # Removed _update_saved_tracks - we now check liked songs individually
+            self._update_saved_tracks(sp)  # Need this for fallback filtering
             self._update_playlists(sp)
             self._update_listening_patterns(sp)
             
@@ -273,7 +322,8 @@ class HybridRecommendationEngine:
             if not self._check_rate_limit():
                 return
             
-            recent_tracks = sp.current_user_recently_played(limit=50)
+            # Get more recent tracks for better patterns
+            recent_tracks = sp.current_user_recently_played(limit=100)
             
             # Analyze patterns by time of day
             patterns = {'morning': [], 'afternoon': [], 'evening': [], 'night': []}
@@ -316,6 +366,10 @@ class HybridRecommendationEngine:
             saved_track_ids = {
                 track['id'] for track in self.profile.data['base_data'].get('saved_tracks', [])
             }
+            
+            # Shuffle playlists to get different ones each time
+            import random
+            random.shuffle(playlists)
             
             for playlist in playlists[:10]:  # Get more playlists for variety
                 if not self._check_rate_limit():
@@ -369,6 +423,10 @@ class HybridRecommendationEngine:
             # Combine top artists and liked artists
             all_artists = top_artists + [{'name': artist} for artist in liked_artists]
             
+            # Shuffle artists to get different ones each time
+            import random
+            random.shuffle(all_artists)
+            
             for artist in all_artists[:6]:  # Get more artists for variety
                 if not self._check_rate_limit():
                     break
@@ -410,7 +468,7 @@ class HybridRecommendationEngine:
         return recommendations[:limit]
     
     def _get_contextual_recommendations(self, limit: int) -> List[Dict]:
-        """Get contextual recommendations based on time/mood"""
+        """Get contextual recommendations based on time using working endpoints"""
         recommendations = []
         
         try:
@@ -427,6 +485,8 @@ class HybridRecommendationEngine:
             else:
                 time_period = 'night'
             
+            logger.info(f"Getting contextual recommendations for {time_period} period (hour: {current_hour})")
+            
             # Get tracks from current time period
             track_ids = patterns.get(time_period, [])
             
@@ -434,32 +494,57 @@ class HybridRecommendationEngine:
                 try:
                     sp = self._get_spotify_client()
                     if sp:
-                        # Get track details
-                        tracks = sp.tracks(track_ids[:10])  # Get more tracks for variety
+                        # Get track details for recent tracks from this time period
+                        recent_tracks = track_ids[:10]  # Get up to 10 tracks
                         
-                        for track in tracks['tracks']:
-                            recommendations.append({
-                                'id': track['id'],
-                                'name': track['name'],
-                                'artist': track['artists'][0]['name'],
-                                'album': track['album']['name'],
-                                'preview_url': track.get('preview_url'),
-                                'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
-                                'source': 'contextual',
-                                'time_period': time_period,
-                                'score': 0.0,
-                                'popularity': track.get('popularity', 0)
-                            })
+                        logger.info(f"Getting details for {len(recent_tracks)} recent tracks from {time_period}")
+                        
+                        # Get track details using working endpoint
+                        tracks_response = sp.tracks(recent_tracks)
+                        
+                        # Get similar tracks by finding artists from recent tracks
+                        artist_ids = set()
+                        for track in tracks_response['tracks']:
+                            if track and track['artists']:
+                                artist_ids.add(track['artists'][0]['id'])
+                        
+                        # Get top tracks from these artists (contextual recommendations)
+                        for artist_id in list(artist_ids)[:3]:  # Use up to 3 artists
+                            try:
+                                if self._check_rate_limit():
+                                    artist_top_tracks = sp.artist_top_tracks(artist_id, country='US')
+                                    
+                                    for track in artist_top_tracks['tracks']:
+                                        if track['id'] not in track_ids:  # Don't include the original tracks
+                                            recommendations.append({
+                                                'id': track['id'],
+                                                'name': track['name'],
+                                                'artist': track['artists'][0]['name'],
+                                                'album': track['album']['name'],
+                                                'preview_url': track.get('preview_url'),
+                                                'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
+                                                'source': 'contextual',
+                                                'time_period': time_period,
+                                                'score': 0.3,  # Boost contextual recommendations
+                                                'popularity': track.get('popularity', 0)
+                                            })
+                                            
+                                            if len(recommendations) >= limit:
+                                                break
+                            except Exception as e:
+                                logger.debug(f"Error getting top tracks for artist {artist_id}: {str(e)}")
+                                continue
                             
                             if len(recommendations) >= limit:
                                 break
                                 
                 except Exception as e:
-                    logger.warning(f"Error getting contextual tracks: {str(e)}")
+                    logger.warning(f"Error getting contextual track details: {str(e)}")
                     
         except Exception as e:
             logger.error(f"Error in contextual recommendations: {str(e)}")
         
+        logger.info(f"Generated {len(recommendations)} contextual recommendations for {time_period}")
         return recommendations[:limit]
     
     def _get_spotify_client(self):
@@ -569,13 +654,65 @@ class HybridRecommendationEngine:
                 logger.warning("Rate limit approaching, skipping liked songs check")
                 return recommendations
             
-            # Use Spotify's efficient endpoint to check which tracks are saved
-            saved_status = sp.current_user_saved_tracks_contains(track_ids_to_check)
+            # Spotify API has a limit on how many IDs you can check at once
+            # Process in batches of 20 (Spotify's limit is usually 50, but we'll be safe)
+            batch_size = 20
+            all_saved_status = []
+            
+            for i in range(0, len(track_ids_to_check), batch_size):
+                batch_ids = track_ids_to_check[i:i + batch_size]
+                logger.info(f"Checking batch {i//batch_size + 1}: {len(batch_ids)} tracks")
+                
+                try:
+                    batch_saved_status = sp.current_user_saved_tracks_contains(batch_ids)
+                    all_saved_status.extend(batch_saved_status)
+                    logger.info(f"Batch {i//batch_size + 1} results: {batch_saved_status}")
+                except Exception as e:
+                    logger.error(f"Error checking batch {i//batch_size + 1}: {str(e)}")
+                    # If batch fails, assume none are saved for this batch
+                    all_saved_status.extend([False] * len(batch_ids))
+            
+            saved_status = all_saved_status
             logger.info(f"Checked {len(track_ids_to_check)} tracks against user's liked songs")
+            logger.info(f"Saved status sample: {saved_status[:5] if saved_status else 'None'}")
             
         except Exception as e:
             logger.error(f"Error checking saved tracks: {str(e)}")
-            return recommendations
+            # Fallback: use cached saved tracks from profile
+            logger.info("Using fallback: checking against cached saved tracks")
+            cached_saved_track_ids = {
+                track['id'] for track in self.profile.data.get('base_data', {}).get('saved_tracks', [])
+            }
+            
+            filtered_recommendations = []
+            filtered_out_count = 0
+            
+            for rec in recommendations:
+                should_filter = False
+                filter_reason = ""
+                
+                # Check if user has liked this track on Spotify (cached)
+                if rec['id'] in cached_saved_track_ids:
+                    should_filter = True
+                    filter_reason = f"Spotify liked song (cached): {rec['name']} by {rec['artist']}"
+                    logger.info(f"🚫 FILTERED OUT LIKED SONG (CACHED): {rec['id']} - {rec['name']} by {rec['artist']}")
+                
+                # Skip if from user's top artists (they know these artists well)
+                elif rec['artist'] in top_artist_names:
+                    should_filter = True
+                    filter_reason = f"Top artist: {rec['name']} by {rec['artist']}"
+                    logger.info(f"🚫 FILTERED OUT TOP ARTIST: {rec['name']} by {rec['artist']}")
+                
+                if should_filter:
+                    filtered_out_count += 1
+                    continue
+                
+                # Keep the track
+                logger.info(f"✅ KEEPING TRACK: {rec['name']} by {rec['artist']} (not liked, not top artist)")
+                filtered_recommendations.append(rec)
+            
+            logger.info(f"Fallback filtered {len(recommendations)} -> {len(filtered_recommendations)} tracks (filtered out {filtered_out_count})")
+            return filtered_recommendations
         
         filtered_out_count = 0
         
@@ -587,28 +724,82 @@ class HybridRecommendationEngine:
             if i < len(saved_status) and saved_status[i]:
                 should_filter = True
                 filter_reason = f"Spotify liked song: {rec['name']} by {rec['artist']}"
-                logger.info(f"Found liked song via API check: {rec['id']} - {rec['name']}")
+                logger.info(f"🚫 FILTERED OUT LIKED SONG: {rec['id']} - {rec['name']} by {rec['artist']}")
             
             # Skip if from user's top artists (they know these artists well)
             elif rec['artist'] in top_artist_names:
                 should_filter = True
                 filter_reason = f"Top artist: {rec['name']} by {rec['artist']}"
+                logger.info(f"🚫 FILTERED OUT TOP ARTIST: {rec['name']} by {rec['artist']}")
             
             if should_filter:
-                logger.info(f"Filtered out {filter_reason}")
                 filtered_out_count += 1
                 continue
             
             # Keep the track
+            logger.info(f"✅ KEEPING TRACK: {rec['name']} by {rec['artist']} (not liked, not top artist)")
             filtered_recommendations.append(rec)
         
         logger.info(f"Filtered {len(recommendations)} -> {len(filtered_recommendations)} tracks (filtered out {filtered_out_count})")
         return filtered_recommendations
     
+    def _filter_out_recently_played(self, recommendations: List[Dict]) -> List[Dict]:
+        """Filter out tracks the user has played recently"""
+        try:
+            sp = self._get_spotify_client()
+            if not sp:
+                return recommendations
+            
+            # Get recently played track IDs
+            recent_tracks = sp.current_user_recently_played(limit=50)
+            recent_track_ids = {item['track']['id'] for item in recent_tracks['items']}
+            
+            filtered_recommendations = []
+            filtered_count = 0
+            
+            for rec in recommendations:
+                if rec['id'] in recent_track_ids:
+                    logger.info(f"Filtered out recently played: {rec['name']} by {rec['artist']}")
+                    filtered_count += 1
+                    continue
+                filtered_recommendations.append(rec)
+            
+            logger.info(f"Filtered out {filtered_count} recently played tracks")
+            return filtered_recommendations
+            
+        except Exception as e:
+            logger.error(f"Error filtering recently played: {str(e)}")
+            return recommendations
+    
     def add_feedback(self, track_id: str, feedback_type: str, track_info: Dict = None):
         """Add user feedback and update profile"""
         self.profile.add_feedback(track_id, feedback_type, track_info)
         logger.info(f"Added feedback: {feedback_type} for track {track_id}")
+    
+    def remove_feedback(self, track_id: str):
+        """Remove user feedback from profile"""
+        try:
+            # Remove from feedback history
+            feedback_history = self.profile.data.get('preferences', {}).get('feedback_history', [])
+            updated_history = [fb for fb in feedback_history if fb.get('track_id') != track_id]
+            
+            if 'preferences' not in self.profile.data:
+                self.profile.data['preferences'] = {}
+            self.profile.data['preferences']['feedback_history'] = updated_history
+            
+            # Update liked artists if this was a like feedback
+            liked_artists = self.profile.data.get('preferences', {}).get('liked_artists', [])
+            if track_info := next((fb for fb in feedback_history if fb.get('track_id') == track_id), None):
+                artist_name = track_info.get('artist')
+                if artist_name in liked_artists:
+                    liked_artists.remove(artist_name)
+                    self.profile.data['preferences']['liked_artists'] = liked_artists
+            
+            self.profile.save()
+            logger.info(f"Removed feedback for track {track_id}")
+            
+        except Exception as e:
+            logger.error(f"Error removing feedback: {str(e)}")
     
     def get_profile_summary(self) -> Dict:
         """Get summary of user profile"""

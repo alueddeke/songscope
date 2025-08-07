@@ -24,71 +24,89 @@ export default function Recommendation() {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [cacheSize, setCacheSize] = useState<number>(0);
+
+  // Fetch recommendations function
+  const fetchRecommendations = async (forceFresh = false) => {
+    try {
+      if (forceFresh) {
+        setIsRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+      
+      console.log("Fetching recommendations from API...", forceFresh ? "(fresh)" : "");
+      console.log("Backend URL:", process.env.NEXT_PUBLIC_BACKEND_URL);
+      
+      // First check if we're authenticated
+      try {
+        console.log("Current cookies:", document.cookie);
+        const authCheck = await get<{authenticated: boolean}>("/api/check-auth/");
+        console.log("Auth check:", authCheck);
+      } catch (authError) {
+        console.error("Auth check failed:", authError);
+      }
+      
+      // Add force_fresh parameter if requested
+      const url = forceFresh ? "/api/recommendations/?force_fresh=true" : "/api/recommendations/";
+      const response = await get<RecommendationsResponse>(url);
+      
+      console.log("Recommendations response:", response);
+      
+      if (!response.recommendations || !Array.isArray(response.recommendations)) {
+        throw new Error("Invalid response format from API");
+      }
+
+      // Set recommendations and reset to first track
+      setRecommendations(response.recommendations);
+      setCurrentIndex(0);
+      
+      console.log("Recommendations loaded:", response.recommendations.length);
+      
+      if (response.recommendations.length === 0) {
+        setError("No recommendations available");
+      }
+      
+      setLoading(false);
+      setIsRefreshing(false);
+    } catch (err) {
+      console.error("Error fetching recommendations:", err);
+      
+      let errorMessage = "Failed to fetch recommendations";
+      
+      if (err instanceof Error) {
+        console.error("Error details:", err);
+        if (err.message.includes("401")) {
+          errorMessage = "Authentication required. Please log in again.";
+        } else if (err.message.includes("403")) {
+          errorMessage = "Access denied. Please check your Spotify permissions.";
+        } else if (err.message.includes("404")) {
+          errorMessage = "Recommendations service not found.";
+        } else if (err.message.includes("500")) {
+          errorMessage = "Server error. Please try again later.";
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      setError(errorMessage);
+      setRecommendations([]);
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
   // Fetch recommendations when the component mounts
   useEffect(() => {
-    async function fetchRecommendations() {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        console.log("Fetching recommendations from API...");
-        console.log("Backend URL:", process.env.NEXT_PUBLIC_BACKEND_URL);
-        
-        // First check if we're authenticated
-        try {
-          console.log("Current cookies:", document.cookie);
-          const authCheck = await get<{authenticated: boolean}>("/api/check-auth/");
-          console.log("Auth check:", authCheck);
-        } catch (authError) {
-          console.error("Auth check failed:", authError);
-        }
-        
-        const response = await get<RecommendationsResponse>("/api/recommendations/");
-        
-        console.log("Recommendations response:", response);
-        
-        if (!response.recommendations || !Array.isArray(response.recommendations)) {
-          throw new Error("Invalid response format from API");
-        }
-
-        setRecommendations(response.recommendations);
-        
-        console.log("Recommendations loaded:", response.recommendations.length);
-        
-        if (response.recommendations.length === 0) {
-          setError("No recommendations available");
-        }
-        
-        setLoading(false);
-      } catch (err) {
-        console.error("Error fetching recommendations:", err);
-        
-        let errorMessage = "Failed to fetch recommendations";
-        
-        if (err instanceof Error) {
-          console.error("Error details:", err);
-          if (err.message.includes("401")) {
-            errorMessage = "Authentication required. Please log in again.";
-          } else if (err.message.includes("403")) {
-            errorMessage = "Access denied. Please check your Spotify permissions.";
-          } else if (err.message.includes("404")) {
-            errorMessage = "Recommendations service not found.";
-          } else if (err.message.includes("500")) {
-            errorMessage = "Server error. Please try again later.";
-          } else {
-            errorMessage = err.message;
-          }
-        }
-        
-        setError(errorMessage);
-        setRecommendations([]);
-        setLoading(false);
-      }
-    }
-
     fetchRecommendations();
   }, []); // Only run once on mount
+
+  // Refresh recommendations function
+  const refreshRecommendations = () => {
+    fetchRecommendations(true); // Force fresh recommendations
+  };
 
   // Use recommendations directly
   const currentRecommendations = recommendations;
@@ -107,6 +125,20 @@ export default function Recommendation() {
     }
   };
 
+  // Handle track removal (when thumbs down is clicked)
+  const handleTrackRemoved = () => {
+    // Remove the current track from recommendations
+    const updatedRecommendations = currentRecommendations.filter((_, index) => index !== currentIndex);
+    setRecommendations(updatedRecommendations);
+    
+    // Adjust current index if needed
+    if (currentIndex >= updatedRecommendations.length && updatedRecommendations.length > 0) {
+      setCurrentIndex(updatedRecommendations.length - 1);
+    } else if (updatedRecommendations.length === 0) {
+      // If no more recommendations, fetch new ones
+      fetchRecommendations(true);
+    }
+  };
 
 
   // Handle loading state
@@ -222,9 +254,39 @@ export default function Recommendation() {
         </div>
 
         <div className="flex justify-between mt-auto items-center">
-          <FeedbackButtonGroup trackId={currentTrack.id} />
+          <FeedbackButtonGroup trackId={currentTrack.id} onTrackRemoved={handleTrackRemoved} />
 
           <div className="flex gap-4 items-center">
+            {/* Cache Status */}
+            {cacheSize > 0 && (
+              <div className="text-green text-sm font-medium">
+                Cache: {cacheSize}/50 tracks
+              </div>
+            )}
+            {/* Refresh Button */}
+            <button
+              onClick={refreshRecommendations}
+              disabled={loading || isRefreshing}
+              className="flex items-center hover:scale-105 transition duration-300 gap-2 bg-green text-black px-3 py-2 rounded-full hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg 
+                className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth={2} 
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+                />
+              </svg>
+              <span className="text-sm font-medium">
+                {isRefreshing ? 'Refreshing...' : 'Refresh'}
+              </span>
+            </button>
+
             {currentIndex > 0 && (
               <button
                 onClick={previousTrack}

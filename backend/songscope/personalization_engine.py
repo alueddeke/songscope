@@ -262,6 +262,37 @@ class PersonalizationEngine:
         # Log the learning event
         logger.info(f"Updated preferences for user {self.user.id} based on {feedback.feedback_type}")
     
+    def remove_feedback_learning(self, track_id: str):
+        """
+        Remove learning effects when a user unlikes a track.
+        
+        Args:
+            track_id: Spotify track ID to remove feedback for
+        """
+        logger.info(f"Removing feedback learning for track {track_id}")
+        
+        # Find and remove the feedback entry
+        try:
+            track = Track.objects.get(spotify_id=track_id)
+            feedback = UserFeedback.objects.filter(
+                user=self.user,
+                track=track,
+                feedback_type='LIKE'
+            ).first()
+            
+            if feedback:
+                # Remove the feedback entry
+                feedback.delete()
+                logger.info(f"Removed LIKE feedback for track {track.name}")
+                
+                # Optionally, we could reverse the learning effects here
+                # For now, we just remove the feedback entry
+                
+        except Track.DoesNotExist:
+            logger.warning(f"Track {track_id} not found when removing feedback")
+        except Exception as e:
+            logger.error(f"Error removing feedback learning: {str(e)}")
+    
     def get_personalization_summary(self) -> Dict:
         """
         Get a summary of the user's personalization profile.

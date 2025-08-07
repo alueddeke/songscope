@@ -255,7 +255,15 @@ def get_track_recommendations(request):
         # Get recommendations using the hybrid engine
         engine = HybridRecommendationEngine(request.user)
         
-        recommended_tracks = engine.get_recommendations(limit=10)
+        # Check if user wants fresh recommendations
+        force_fresh = request.GET.get('force_fresh', 'false').lower() == 'true'
+        
+        # Get recommendations (will use cache unless force_fresh=True)
+        recommended_tracks = engine.get_recommendations(limit=10, force_fresh=force_fresh)
+        
+        # Log cache info for debugging
+        cache_stats = engine.profile.get_cache_stats()
+        logger.info(f"User {request.user.id} cache stats: {cache_stats}")
 
         if not recommended_tracks:
             logger.warning("No recommendations returned from engine")
@@ -530,6 +538,8 @@ def submit_feedback(request):
         
         # Get or create track
         track_id = serializer.validated_data['track_id']
+        feedback_type = serializer.validated_data['feedback_type']
+        
         track, created = Track.objects.get_or_create(
             spotify_id=track_id,
             defaults={
@@ -551,34 +561,81 @@ def submit_feedback(request):
             track.genres = artist_info['genres']
             track.save()
 
-        # Create feedback entry (without audio features)
-        feedback = UserFeedback.objects.create(
+        # Check if user already has feedback for this track
+        existing_feedback = UserFeedback.objects.filter(
             user=request.user,
             track=track,
-            feedback_type=serializer.validated_data['feedback_type'],
-            track_features={}  # Empty since we can't get audio features
-        )
+            feedback_type='LIKE'
+        ).first()
 
-        # Update recommendations using the enhanced personalization engine
-        from .personalization_engine import PersonalizationEngine
-        personalization_engine = PersonalizationEngine(request.user)
-        personalization_engine.apply_feedback_learning(feedback)
-        
-        # Also update hybrid profile
-        hybrid_engine = HybridRecommendationEngine(request.user)
-        track_info = {
-            'artist': track.artist,
-            'name': track.name,
-            'album': track.album
-        }
-        hybrid_engine.add_feedback(track.spotify_id, feedback.feedback_type, track_info)
-        
-        logger.info(f"Feedback processed: {feedback.feedback_type} for track {track.name}")
+        if feedback_type == 'LIKE' and existing_feedback:
+            # User is unliking - remove the existing feedback
+            existing_feedback.delete()
+            logger.info(f"Removed LIKE feedback for track {track.name}")
+            
+            # Update recommendations to reflect the removal
+            from .personalization_engine import PersonalizationEngine
+            personalization_engine = PersonalizationEngine(request.user)
+            personalization_engine.remove_feedback_learning(track.spotify_id)
+            
+            # Also update hybrid profile
+            hybrid_engine = HybridRecommendationEngine(request.user)
+            hybrid_engine.remove_feedback(track.spotify_id)
+            
+            return JsonResponse({'status': 'success', 'action': 'removed'})
+        else:
+            # Create new feedback entry (without audio features)
+            feedback = UserFeedback.objects.create(
+                user=request.user,
+                track=track,
+                feedback_type=feedback_type,
+                track_features={}  # Empty since we can't get audio features
+            )
 
-        return JsonResponse({'status': 'success'})
+            # Update recommendations using the enhanced personalization engine
+            from .personalization_engine import PersonalizationEngine
+            personalization_engine = PersonalizationEngine(request.user)
+            personalization_engine.apply_feedback_learning(feedback)
+            
+            # Also update hybrid profile
+            hybrid_engine = HybridRecommendationEngine(request.user)
+            track_info = {
+                'artist': track.artist,
+                'name': track.name,
+                'album': track.album
+            }
+            hybrid_engine.add_feedback(track.spotify_id, feedback.feedback_type, track_info)
+            
+            logger.info(f"Feedback processed: {feedback.feedback_type} for track {track.name}")
+
+            return JsonResponse({'status': 'success', 'action': 'added'})
 
     except Exception as e:
         logger.error(f"Error submitting feedback: {str(e)}")
+        return JsonResponse({'error': 'Failed to submit feedback'}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_track_feedback(request, track_id):
+    """Check if user has already given feedback for a specific track"""
+    try:
+        # Check if user has liked this track
+        track = Track.objects.filter(spotify_id=track_id).first()
+        if not track:
+            return JsonResponse({'liked': False})
+        
+        feedback = UserFeedback.objects.filter(
+            user=request.user,
+            track=track,
+            feedback_type='LIKE'
+        ).first()
+        
+        return JsonResponse({'liked': feedback is not None})
+        
+    except Exception as e:
+        logger.error(f"Error checking track feedback: {str(e)}")
+        return JsonResponse({'error': 'Failed to check feedback'}, status=500)
+
 @login_required
 def get_user_name(request):
     """Get user's name using Spotipy"""
