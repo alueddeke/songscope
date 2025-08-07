@@ -93,7 +93,8 @@ class TrackDiscoveryEngine:
                     'album': track['album']['name'],
                     'preview_url': track.get('preview_url'),
                     'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
-                    'source': 'top_tracks'
+                    'source': 'top_tracks',
+                    'popularity': track.get('popularity', 0)
                 })
                 
                 # Get similar tracks by searching for the artist
@@ -123,7 +124,8 @@ class TrackDiscoveryEngine:
                     'album': track['album']['name'],
                     'preview_url': track.get('preview_url'),
                     'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
-                    'source': 'recently_played'
+                    'source': 'recently_played',
+                    'popularity': track.get('popularity', 0)
                 })
                 
                 # Get tracks from the same album
@@ -153,7 +155,8 @@ class TrackDiscoveryEngine:
                     'album': track['album']['name'],
                     'preview_url': track.get('preview_url'),
                     'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
-                    'source': 'saved_tracks'
+                    'source': 'saved_tracks',
+                    'popularity': track.get('popularity', 0)
                 })
                 
                 # Get related artists (but don't fail if this doesn't work)
@@ -186,7 +189,8 @@ class TrackDiscoveryEngine:
                     'album': track['album']['name'],
                     'preview_url': track.get('preview_url'),
                     'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
-                    'source': 'artist_top_tracks'
+                    'source': 'artist_top_tracks',
+                    'popularity': track.get('popularity', 0)
                 })
             
             return recommendations
@@ -210,7 +214,8 @@ class TrackDiscoveryEngine:
                     'album': track['album']['name'] if 'album' in track else 'Unknown Album',
                     'preview_url': track.get('preview_url'),
                     'image_url': None,  # Would need album info for this
-                    'source': 'album_tracks'
+                    'source': 'album_tracks',
+                    'popularity': track.get('popularity', 0)
                 })
             
             return recommendations
@@ -222,12 +227,17 @@ class TrackDiscoveryEngine:
     def _get_related_artists(self, sp_client, artist_id: str, limit: int) -> List[Dict]:
         """Get tracks from related artists."""
         try:
+            # Skip artists that are likely to fail (based on previous experience)
+            if artist_id in ['6yJCxee7QumYr820xdIsjo', '2o7k9CBUdlkyWt4qyFAdvm', '3QwPZWMfGsTvOmBJylFvrS', '5ypQRq934XJmh9eXioqKiQ']:
+                logger.debug(f"Skipping artist {artist_id} - known to fail")
+                return []
+            
             # First, validate the artist exists
             try:
                 artist_info = sp_client.artist(artist_id)
-                logger.info(f"Found artist: {artist_info['name']} (ID: {artist_id})")
+                logger.debug(f"Found artist: {artist_info['name']} (ID: {artist_id})")
             except Exception as e:
-                logger.warning(f"Artist {artist_id} not found or inaccessible: {str(e)}")
+                logger.debug(f"Artist {artist_id} not found or inaccessible: {str(e)}")
                 return []
             
             # Get related artists
@@ -247,7 +257,8 @@ class TrackDiscoveryEngine:
                             'album': track['album']['name'],
                             'preview_url': track.get('preview_url'),
                             'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
-                            'source': 'related_artist'
+                            'source': 'related_artist',
+                            'popularity': track.get('popularity', 0)
                         })
                 except Exception as e:
                     logger.warning(f"Could not get top track for related artist {artist['name']}: {str(e)}")

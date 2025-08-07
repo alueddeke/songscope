@@ -46,21 +46,18 @@ export default function Recommendation() {
         
         const response = await get<RecommendationsResponse>("/api/recommendations/");
         
-        console.log("API Response:", response);
+        console.log("Recommendations response:", response);
         
         if (!response.recommendations || !Array.isArray(response.recommendations)) {
           throw new Error("Invalid response format from API");
         }
 
-        // Show all recommendations, even those without preview URLs
-        const allRecommendations = response.recommendations;
+        setRecommendations(response.recommendations);
         
-        console.log("All recommendations:", allRecommendations);
+        console.log("Recommendations loaded:", response.recommendations.length);
         
-        if (allRecommendations.length === 0) {
+        if (response.recommendations.length === 0) {
           setError("No recommendations available");
-        } else {
-          setRecommendations(allRecommendations);
         }
         
         setLoading(false);
@@ -91,11 +88,14 @@ export default function Recommendation() {
     }
 
     fetchRecommendations();
-  }, []);
+  }, []); // Only run once on mount
+
+  // Use recommendations directly
+  const currentRecommendations = recommendations;
 
   // Handle the next track
   const nextTrack = () => {
-    if (currentIndex < recommendations.length - 1) {
+    if (currentIndex < currentRecommendations.length - 1) {
       setCurrentIndex(currentIndex + 1);
     }
   };
@@ -140,7 +140,7 @@ export default function Recommendation() {
   }
 
   // Handle empty recommendations
-  if (recommendations.length === 0) {
+  if (currentRecommendations.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -151,7 +151,7 @@ export default function Recommendation() {
     );
   }
 
-  const currentTrack = recommendations[currentIndex];
+  const currentTrack = currentRecommendations[currentIndex];
 
   // Safety check for current track
   if (!currentTrack) {
@@ -167,6 +167,8 @@ export default function Recommendation() {
 
   return (
     <div className="mx-auto flex gap-8 lg:gap-12 w-[100%] flex-col md:flex-row p-2 md:p-4 lg:p-8">
+      {/* Hidden Gems Toggle */}
+  
       <div className="md:w-[45%] lg:w-[55%] p-2 lg:p-0">
         <img 
           src={currentTrack.image_url || '/images/albums.png'} 
@@ -190,14 +192,18 @@ export default function Recommendation() {
           <h4 className="text-xl text-bold text-white">{currentTrack.album}</h4>
         </div>
 
-        <div className="flex flex-col gap-2 p-2">
+        {/* <div className="flex flex-col gap-2 p-2">
           <span className="text-white font-light text-sm">Preview</span>
           {currentTrack.preview_url ? (
             <AudioPlayer src={currentTrack.preview_url} />
           ) : (
             <div className="text-gray-400 text-sm">No preview available</div>
           )}
-        </div>
+        </div> */}
+
+
+        {/* Removed filter toggle - now just shows recommendations */}
+
 
         <div className="flex gap-4 lg:gap-8 flex-col lg:flex-row">
           <AddToLiked id={currentTrack.id} />
@@ -233,12 +239,12 @@ export default function Recommendation() {
               </button>
             )}
 
-            {currentIndex < recommendations.length - 1 ? (
+            {currentIndex < currentRecommendations.length - 1 ? (
               <button
                 onClick={nextTrack}
                 className="flex items-center hover:scale-105 transition duration-300 gap-1"
               >
-                <span className="text-green">Next Recommendation</span>
+                <span className="text-green">Next</span>
                 <img
                   src="/images/arrow_back.png"
                   alt="next arrow icon"

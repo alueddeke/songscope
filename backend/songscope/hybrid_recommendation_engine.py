@@ -31,6 +31,8 @@ class HybridRecommendationEngine:
         self.user = user
         self.profile = self._get_or_create_profile()
         self.rate_limit_monitor = rate_limit_monitor
+        self._api_cache = {}  # Cache for API results
+        self._cache_ttl = 300  # 5 minutes cache TTL
     
     def _get_or_create_profile(self) -> UserProfile:
         """Get existing profile or create new one"""
@@ -76,21 +78,21 @@ class HybridRecommendationEngine:
             # Get recommendations from multiple sources
             all_recommendations = []
             
-            # Strategy 1: Playlist Mining
+            # Strategy 1: Playlist Mining (get more variety)
             if self._check_rate_limit():
-                playlist_recs = self._get_playlist_recommendations(limit // 3)
+                playlist_recs = self._get_playlist_recommendations(limit * 2)  # Get more to shuffle
                 all_recommendations.extend(playlist_recs)
                 logger.info(f"Playlist mining found {len(playlist_recs)} recommendations")
             
-            # Strategy 2: Artist Network
+            # Strategy 2: Artist Network (get more variety)
             if self._check_rate_limit():
-                artist_recs = self._get_artist_network_recommendations(limit // 3)
+                artist_recs = self._get_artist_network_recommendations(limit * 2)  # Get more to shuffle
                 all_recommendations.extend(artist_recs)
                 logger.info(f"Artist network found {len(artist_recs)} recommendations")
             
-            # Strategy 3: Contextual Recommendations
+            # Strategy 3: Contextual Recommendations (get more variety)
             if self._check_rate_limit():
-                contextual_recs = self._get_contextual_recommendations(limit // 3)
+                contextual_recs = self._get_contextual_recommendations(limit * 2)  # Get more to shuffle
                 all_recommendations.extend(contextual_recs)
                 logger.info(f"Contextual analysis found {len(contextual_recs)} recommendations")
             
@@ -103,10 +105,51 @@ class HybridRecommendationEngine:
             unique_recommendations = self._remove_duplicates(all_recommendations)
             scored_recommendations = self._score_recommendations(unique_recommendations)
             
+            # Shuffle recommendations to add variety
+            import random
+            random.shuffle(scored_recommendations)
+            
+            # Always filter out Spotify liked songs
+            scored_recommendations = self._filter_out_liked_songs(scored_recommendations)
+            logger.info(f"Filtered out Spotify liked songs, {len(scored_recommendations)} tracks remaining")
+            
             # Return top recommendations
             final_recommendations = scored_recommendations[:limit]
             
+            # If we don't have enough, get more from fallback
+            if len(final_recommendations) < limit:
+                logger.info(f"Only have {len(final_recommendations)} recommendations, getting more from fallback...")
+                fallback_recs = self._get_fallback_recommendations(limit * 2)
+                
+                # Fallback recommendations are already filtered
+                
+                # Add fallback recommendations
+                for rec in fallback_recs:
+                    if len(final_recommendations) >= limit:
+                        break
+                    final_recommendations.append(rec)
+                
+                logger.info(f"Added {len([r for r in fallback_recs if r in final_recommendations])} from fallback")
+            
+            # If still not enough, duplicate some to reach the limit
+            if len(final_recommendations) < limit and len(scored_recommendations) > 0:
+                logger.info(f"Still only have {len(final_recommendations)} recommendations, duplicating to reach {limit}")
+                while len(final_recommendations) < limit and len(scored_recommendations) > 0:
+                    # Cycle through available recommendations
+                    for rec in scored_recommendations:
+                        if len(final_recommendations) >= limit:
+                            break
+                        # Create a copy with a note that it's duplicated
+                        rec_copy = rec.copy()
+                        rec_copy['duplicated'] = True
+                        final_recommendations.append(rec_copy)
+            
             logger.info(f"Generated {len(final_recommendations)} hybrid recommendations")
+            
+            # Debug: Log what we're returning
+            for i, rec in enumerate(final_recommendations[:3]):  # Log first 3
+                logger.info(f"Recommendation {i+1}: {rec['name']} by {rec['artist']} (source: {rec['source']}, popularity: {rec.get('popularity', 'N/A')})")
+            
             return final_recommendations
             
         except Exception as e:
@@ -136,7 +179,7 @@ class HybridRecommendationEngine:
             
             # Update base data with error handling
             self._update_top_artists(sp)
-            self._update_saved_tracks(sp)
+            # Removed _update_saved_tracks - we now check liked songs individually
             self._update_playlists(sp)
             self._update_listening_patterns(sp)
             
@@ -182,8 +225,9 @@ class HybridRecommendationEngine:
             if not self._check_rate_limit():
                 return
             
-            saved_tracks = sp.current_user_saved_tracks(limit=50)
-            self.profile.data['base_data']['saved_tracks'] = [
+            # Get ALL saved tracks (Spotify liked songs) - increase limit significantly
+            saved_tracks = sp.current_user_saved_tracks(limit=1000)
+            saved_tracks_list = [
                 {
                     'id': item['track']['id'],
                     'name': item['track']['name'],
@@ -193,6 +237,12 @@ class HybridRecommendationEngine:
                 }
                 for item in saved_tracks['items']
             ]
+            
+            self.profile.data['base_data']['saved_tracks'] = saved_tracks_list
+            
+            # Log how many liked songs we actually loaded
+            logger.info(f"Loaded {len(saved_tracks_list)} Spotify liked songs")
+            logger.info(f"Sample liked songs: {[track['name'] for track in saved_tracks_list[:5]]}")
         except Exception as e:
             logger.error(f"Error updating saved tracks: {str(e)}")
             self._add_error('saved_tracks', 'api_failure', str(e))
@@ -267,7 +317,7 @@ class HybridRecommendationEngine:
                 track['id'] for track in self.profile.data['base_data'].get('saved_tracks', [])
             }
             
-            for playlist in playlists[:5]:  # Limit to 5 playlists to avoid rate limits
+            for playlist in playlists[:10]:  # Get more playlists for variety
                 if not self._check_rate_limit():
                     break
                 
@@ -291,7 +341,8 @@ class HybridRecommendationEngine:
                                 'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
                                 'source': 'playlist_mining',
                                 'playlist_name': playlist['name'],
-                                'score': 0.0  # Will be calculated later
+                                'score': 0.0,  # Will be calculated later
+                                'popularity': track.get('popularity', 0)
                             })
                             
                             if len(recommendations) >= limit:
@@ -318,7 +369,7 @@ class HybridRecommendationEngine:
             # Combine top artists and liked artists
             all_artists = top_artists + [{'name': artist} for artist in liked_artists]
             
-            for artist in all_artists[:3]:  # Limit to avoid rate limits
+            for artist in all_artists[:6]:  # Get more artists for variety
                 if not self._check_rate_limit():
                     break
                 
@@ -342,7 +393,8 @@ class HybridRecommendationEngine:
                                     'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
                                     'source': 'artist_network',
                                     'artist_name': artist['name'],
-                                    'score': 0.0
+                                    'score': 0.0,
+                                    'popularity': track.get('popularity', 0)
                                 })
                                 
                                 if len(recommendations) >= limit:
@@ -383,7 +435,7 @@ class HybridRecommendationEngine:
                     sp = self._get_spotify_client()
                     if sp:
                         # Get track details
-                        tracks = sp.tracks(track_ids[:5])  # Limit to 5 tracks
+                        tracks = sp.tracks(track_ids[:10])  # Get more tracks for variety
                         
                         for track in tracks['tracks']:
                             recommendations.append({
@@ -395,7 +447,8 @@ class HybridRecommendationEngine:
                                 'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
                                 'source': 'contextual',
                                 'time_period': time_period,
-                                'score': 0.0
+                                'score': 0.0,
+                                'popularity': track.get('popularity', 0)
                             })
                             
                             if len(recommendations) >= limit:
@@ -484,6 +537,73 @@ class HybridRecommendationEngine:
         
         logger.warning("No recommendations available from any source")
         return []
+    
+    # Removed complex hidden gems filter - replaced with simple _filter_out_liked_songs
+    
+    def _filter_out_liked_songs(self, recommendations: List[Dict]) -> List[Dict]:
+        """
+        Efficient filter to exclude songs the user has liked/saved.
+        Uses Spotify's check_users_saved_tracks endpoint to check each song individually.
+        """
+        filtered_recommendations = []
+        
+        # Get user's top artists (they know these well)
+        top_artist_names = {
+            artist['name'] for artist in self.profile.data.get('base_data', {}).get('top_artists', [])
+        }
+        
+        logger.info(f"Filtering {len(recommendations)} recommendations against {len(top_artist_names)} top artists")
+        logger.info(f"Sample top artists: {list(top_artist_names)[:5] if top_artist_names else 'None'}")
+        
+        # Get Spotify client
+        sp = self._get_spotify_client()
+        if not sp:
+            logger.error("No Spotify client available for filtering")
+            return recommendations
+        
+        # Check which tracks the user has saved (liked)
+        track_ids_to_check = [rec['id'] for rec in recommendations]
+        
+        try:
+            if not self._check_rate_limit():
+                logger.warning("Rate limit approaching, skipping liked songs check")
+                return recommendations
+            
+            # Use Spotify's efficient endpoint to check which tracks are saved
+            saved_status = sp.current_user_saved_tracks_contains(track_ids_to_check)
+            logger.info(f"Checked {len(track_ids_to_check)} tracks against user's liked songs")
+            
+        except Exception as e:
+            logger.error(f"Error checking saved tracks: {str(e)}")
+            return recommendations
+        
+        filtered_out_count = 0
+        
+        for i, rec in enumerate(recommendations):
+            should_filter = False
+            filter_reason = ""
+            
+            # Check if user has liked this track on Spotify
+            if i < len(saved_status) and saved_status[i]:
+                should_filter = True
+                filter_reason = f"Spotify liked song: {rec['name']} by {rec['artist']}"
+                logger.info(f"Found liked song via API check: {rec['id']} - {rec['name']}")
+            
+            # Skip if from user's top artists (they know these artists well)
+            elif rec['artist'] in top_artist_names:
+                should_filter = True
+                filter_reason = f"Top artist: {rec['name']} by {rec['artist']}"
+            
+            if should_filter:
+                logger.info(f"Filtered out {filter_reason}")
+                filtered_out_count += 1
+                continue
+            
+            # Keep the track
+            filtered_recommendations.append(rec)
+        
+        logger.info(f"Filtered {len(recommendations)} -> {len(filtered_recommendations)} tracks (filtered out {filtered_out_count})")
+        return filtered_recommendations
     
     def add_feedback(self, track_id: str, feedback_type: str, track_info: Dict = None):
         """Add user feedback and update profile"""

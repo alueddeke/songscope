@@ -254,7 +254,8 @@ def get_track_recommendations(request):
 
         # Get recommendations using the hybrid engine
         engine = HybridRecommendationEngine(request.user)
-        recommended_tracks = engine.get_recommendations(limit=18)
+        
+        recommended_tracks = engine.get_recommendations(limit=10)
 
         if not recommended_tracks:
             logger.warning("No recommendations returned from engine")
@@ -287,7 +288,8 @@ def get_track_recommendations(request):
                     'preview_url': track.get('preview_url'),
                     'image_url': image_url,
                     'source': track.get('source', 'unknown'),
-                    'score': track.get('score', 0.0)
+                    'score': track.get('score', 0.0),
+                    'popularity': track.get('popularity', 0)
                 }
                 processed_tracks.append(processed_track)
                 
