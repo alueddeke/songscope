@@ -50,7 +50,7 @@ token_url = 'https://accounts.spotify.com/api/token'
 def spotify_login(request):
     client_id = settings.SPOTIFY_CLIENT_ID
     redirect_uri = settings.SPOTIFY_REDIRECT_URI
-    scope = 'user-read-private user-read-email user-top-read user-read-recently-played user-library-modify user-read-playback-state'
+    scope = 'user-read-private user-read-email user-top-read user-read-recently-played user-library-modify user-read-playback-state user-library-read playlist-read-private'
     authorization_base_url = 'https://accounts.spotify.com/authorize'
 
     spotify = OAuth2Session(client_id, scope=scope, redirect_uri=redirect_uri)
@@ -259,15 +259,38 @@ def get_track_recommendations(request):
             logger.warning("No recommendations returned from engine")
             return JsonResponse({'recommendations': []})
 
+        logger.info(f"Processing {len(recommended_tracks)} recommendations")
+        logger.info(f"Sample track format: {recommended_tracks[0] if recommended_tracks else 'No tracks'}")
+
         # Process recommendations for frontend
-        processed_tracks = [{
-            'id': track['id'],
-            'name': track['name'],
-            'artist': track['artists'][0]['name'],
-            'album': track['album']['name'],
-            'preview_url': track.get('preview_url'),
-            'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None
-        } for track in recommended_tracks]
+        processed_tracks = []
+        for track in recommended_tracks:
+            try:
+                # Handle both Spotify API format and our discovery engine format
+                if 'artists' in track:
+                    # Spotify API format
+                    artist_name = track['artists'][0]['name']
+                    album_name = track['album']['name']
+                    image_url = track['album']['images'][0]['url'] if track['album']['images'] else None
+                else:
+                    # Our discovery engine format
+                    artist_name = track.get('artist', 'Unknown Artist')
+                    album_name = track.get('album', 'Unknown Album')
+                    image_url = track.get('image_url')
+                
+                processed_track = {
+                    'id': track['id'],
+                    'name': track['name'],
+                    'artist': artist_name,
+                    'album': album_name,
+                    'preview_url': track.get('preview_url'),
+                    'image_url': image_url
+                }
+                processed_tracks.append(processed_track)
+                
+            except Exception as e:
+                logger.error(f"Error processing track {track.get('id', 'unknown')}: {str(e)}")
+                continue
 
         # Log recommendations
         for track in processed_tracks:
@@ -284,6 +307,146 @@ def get_track_recommendations(request):
 @login_required
 def check_auth(request):
     return JsonResponse({'authenticated': True})
+
+@api_view(['GET'])
+def debug_auth(request):
+    """Debug endpoint to check authentication status"""
+    return JsonResponse({
+        'authenticated': request.user.is_authenticated,
+        'user_id': request.user.id if request.user.is_authenticated else None,
+        'username': request.user.username if request.user.is_authenticated else None,
+        'session_id': request.session.session_key,
+        'cookies': dict(request.COOKIES)
+    })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_personalization_summary(request):
+    """Get a summary of the user's personalization profile"""
+    try:
+        from .personalization_engine import PersonalizationEngine
+        personalization_engine = PersonalizationEngine(request.user)
+        summary = personalization_engine.get_personalization_summary()
+        return JsonResponse(summary)
+    except Exception as e:
+        logger.error(f"Error getting personalization summary: {str(e)}")
+        return JsonResponse({'error': 'Failed to get personalization summary'}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def test_spotify_recommendations(request):
+    """Test endpoint to debug Spotify recommendations API"""
+    try:
+        spotify_token = SpotifyToken.objects.get(user=request.user)
+        if spotify_token.is_expired():
+            spotify_token = refresh_spotify_token(spotify_token)
+        
+        sp = get_spotipy_client(spotify_token.access_token)
+        
+        # Test 1: Simple recommendations with popular track
+        try:
+            logger.info("Testing simple recommendations...")
+            # Try with minimal parameters first
+            simple_recs = sp.recommendations(
+                seed_tracks=['0c6xIDDpzE81m2q797ordA'],  # Different track ID
+                limit=5
+            )
+            logger.info(f"Simple recommendations test: {len(simple_recs['tracks'])} tracks")
+        except Exception as e:
+            logger.error(f"Simple recommendations failed: {str(e)}")
+            logger.error(f"Error type: {type(e)}")
+            simple_recs = None
+        
+        # Test 2: Get user's top tracks
+        try:
+            top_tracks = sp.current_user_top_tracks(limit=5)
+            logger.info(f"Top tracks test: {len(top_tracks['items'])} tracks")
+        except Exception as e:
+            logger.error(f"Top tracks failed: {str(e)}")
+            top_tracks = None
+        
+        # Test 3: Get audio features
+        try:
+            if top_tracks and top_tracks['items']:
+                track_id = top_tracks['items'][0]['id']
+                logger.info(f"Testing audio features for track: {track_id}")
+                features = sp.audio_features([track_id])
+                logger.info(f"Audio features test: {features[0] if features else 'None'}")
+            else:
+                features = None
+        except Exception as e:
+            logger.error(f"Audio features failed: {str(e)}")
+            logger.error(f"Error type: {type(e)}")
+            features = None
+        
+        # Capture error messages
+        simple_recs_error = None
+        audio_features_error = None
+        
+        if simple_recs is None:
+            try:
+                sp.recommendations(seed_tracks=['0c6xIDDpzE81m2q797ordA'], limit=5)
+            except Exception as e:
+                simple_recs_error = str(e)
+        
+        if features is None and top_tracks and top_tracks['items']:
+            try:
+                sp.audio_features([top_tracks['items'][0]['id']])
+            except Exception as e:
+                audio_features_error = str(e)
+        
+        return JsonResponse({
+            'simple_recommendations_working': simple_recs is not None,
+            'top_tracks_working': top_tracks is not None,
+            'audio_features_working': features is not None,
+            'simple_recs_count': len(simple_recs['tracks']) if simple_recs else 0,
+            'top_tracks_count': len(top_tracks['items']) if top_tracks else 0,
+            'simple_recs_error': simple_recs_error,
+            'audio_features_error': audio_features_error
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in test_spotify_recommendations: {str(e)}")
+        return JsonResponse({'error': f'Test failed: {str(e)}'}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_simple_recommendations(request):
+    """Simple recommendations endpoint for testing feedback"""
+    try:
+        # Return some popular tracks for testing feedback
+        test_tracks = [
+            {
+                'id': '4iV5W9uYEdYUVa79Axb7Rh',
+                'name': 'Blinding Lights',
+                'artist': 'The Weeknd',
+                'album': 'After Hours',
+                'preview_url': 'https://p.scdn.co/mp3-preview/...',
+                'image_url': 'https://i.scdn.co/image/...'
+            },
+            {
+                'id': '0V3wPSX9ygBnCm8psKOegu',
+                'name': 'As It Was',
+                'artist': 'Harry Styles',
+                'album': 'Harry\'s House',
+                'preview_url': 'https://p.scdn.co/mp3-preview/...',
+                'image_url': 'https://i.scdn.co/image/...'
+            },
+            {
+                'id': '1Qrg8KdBHuXFu6GMcSFYyq',
+                'name': 'Flowers',
+                'artist': 'Miley Cyrus',
+                'album': 'Endless Summer Vacation',
+                'preview_url': 'https://p.scdn.co/mp3-preview/...',
+                'image_url': 'https://i.scdn.co/image/...'
+            }
+        ]
+        
+        return JsonResponse({'recommendations': test_tracks})
+        
+    except Exception as e:
+        logger.error(f"Error in get_simple_recommendations: {str(e)}")
+        return JsonResponse({'error': f'Failed: {str(e)}'}, status=500)
 
 def refresh_spotify_token(spotify_token):
     refresh_token = spotify_token.refresh_token
@@ -347,31 +510,32 @@ def submit_feedback(request):
             }
         )
 
-        # Update track details if new or missing audio features
-        if created or not track.audio_features:
+        # Update track details if new (without audio features since API is broken)
+        if created:
             track_info = sp.track(track_id)
-            audio_features = sp.audio_features([track_id])[0]
             artist_info = sp.artist(track_info['artists'][0]['id'])
             
             track.name = track_info['name']
             track.artist = track_info['artists'][0]['name']
             track.album = track_info['album']['name']
             track.popularity = track_info['popularity']
-            track.audio_features = audio_features
             track.genres = artist_info['genres']
             track.save()
 
-        # Create feedback entry
+        # Create feedback entry (without audio features)
         feedback = UserFeedback.objects.create(
             user=request.user,
             track=track,
             feedback_type=serializer.validated_data['feedback_type'],
-            track_features=track.audio_features
+            track_features={}  # Empty since we can't get audio features
         )
 
-        # Update recommendations using the engine
-        engine = RecommendationEngine(request.user)
-        engine.update_preferences(feedback)
+        # Update recommendations using the enhanced personalization engine
+        from .personalization_engine import PersonalizationEngine
+        personalization_engine = PersonalizationEngine(request.user)
+        personalization_engine.apply_feedback_learning(feedback)
+        
+        logger.info(f"Feedback processed: {feedback.feedback_type} for track {track.name}")
 
         return JsonResponse({'status': 'success'})
 

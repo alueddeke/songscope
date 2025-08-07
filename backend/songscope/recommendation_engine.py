@@ -4,6 +4,8 @@ from django.utils import timezone
 import numpy as np
 from typing import Dict, List, Optional
 from .models import UserPreferences, UserFeedback, Track
+from .personalization_engine import PersonalizationEngine
+from .track_discovery_engine import TrackDiscoveryEngine
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,59 +16,20 @@ class RecommendationEngine:
         self.preferences = UserPreferences.objects.get_or_create(user=user)[0]
         
     def get_personalized_recommendations(self, sp_client, limit=20):
-        """Get recommendations using personalized weights"""
+        """Get recommendations using the track discovery engine (no Spotify recommendations API)"""
         try:
-            # Get user's recent feedback
-            recent_feedback = UserFeedback.objects.filter(
-                user=self.user,
-                created_at__gte=timezone.now() - timedelta(days=30)
-            )
+            logger.info(f"Starting track discovery recommendations for user {self.user.id}")
             
-            # Calculate feature targets based on positive feedback
-            positive_feedback = recent_feedback.filter(feedback_type__in=['LIKE', 'SAVE'])
+            # Use the track discovery engine instead of Spotify's recommendations API
+            discovery_engine = TrackDiscoveryEngine(self.user)
+            recommendations = discovery_engine.get_personalized_recommendations(sp_client, limit)
             
-            if positive_feedback.exists():
-                targets = self._calculate_targets(positive_feedback)
-                logger.info(f"Calculated targets from feedback: {targets}")
-            else:
-                # Fall back to user's top tracks
-                logger.info("No feedback found, falling back to top tracks")
-                try:
-                    top_tracks = sp_client.current_user_top_tracks(limit=5)
-                    track_ids = [track['id'] for track in top_tracks['items']]
-                    audio_features = sp_client.audio_features(track_ids)
-                    targets = self._calculate_targets_from_features(audio_features)
-                except Exception as e:
-                    logger.error(f"Error getting top tracks: {str(e)}")
-                    # Use default targets if Spotify API fails
-                    targets = self._get_default_targets()
+            logger.info(f"Generated {len(recommendations)} recommendations from track discovery")
+            return recommendations
             
-            # Get seed tracks
-            seed_tracks = self._get_seed_tracks(sp_client)
-            logger.info(f"Using seed tracks: {seed_tracks}")
-            
-            # Add target prefix to feature names for Spotify API
-            formatted_targets = {f"target_{k}": v for k, v in targets.items()}
-            
-            try:
-                # Simplify the recommendation call - only use essential parameters
-                recommendations = sp_client.recommendations(
-                    seed_tracks=seed_tracks[:5],
-                    limit=limit
-                )
-                return recommendations['tracks']
-            except Exception as e:
-                logger.error(f"Error getting recommendations: {str(e)}")
-                # Try with just seed tracks and no targets
-                try:
-                    recommendations = sp_client.recommendations(
-                        seed_tracks=seed_tracks[:3],
-                        limit=limit
-                    )
-                    return recommendations['tracks']
-                except Exception as e2:
-                    logger.error(f"Error with simplified recommendations: {str(e2)}")
-                    return []
+        except Exception as e:
+            logger.error(f"Error in get_personalized_recommendations: {str(e)}")
+            return []
             
         except Exception as e:
             logger.error(f"Error in get_personalized_recommendations: {str(e)}")
@@ -130,6 +93,8 @@ class RecommendationEngine:
     def _get_seed_tracks(self, sp_client, num_seeds=5) -> List[str]:
         """Get seed tracks from liked songs and top tracks"""
         try:
+            logger.info(f"Getting seed tracks for user {self.user.id}")
+            
             # Get recently liked tracks
             liked_tracks = UserFeedback.objects.filter(
                 user=self.user,
@@ -138,16 +103,20 @@ class RecommendationEngine:
             ).values_list('track__spotify_id', flat=True)[:num_seeds]
             
             seed_tracks = list(liked_tracks)
+            logger.info(f"Found {len(seed_tracks)} liked tracks for seeds")
             
             # If we need more seeds, get from top tracks
             if len(seed_tracks) < num_seeds:
                 try:
                     remaining_seeds = num_seeds - len(seed_tracks)
+                    logger.info(f"Need {remaining_seeds} more seeds from top tracks")
                     top_tracks = sp_client.current_user_top_tracks(limit=remaining_seeds)
+                    logger.info(f"Got {len(top_tracks['items'])} top tracks from Spotify")
                     seed_tracks.extend(track['id'] for track in top_tracks['items'])
                 except Exception as e:
                     logger.error(f"Error getting top tracks for seeds: {str(e)}")
             
+            logger.info(f"Final seed tracks: {seed_tracks}")
             return seed_tracks[:num_seeds] if seed_tracks else []
             
         except Exception as e:
