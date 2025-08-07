@@ -29,6 +29,7 @@ from .models import SpotifyToken, Track, UserFeedback, UserPreferences, Recommen
 from .logging_config import logger, log_api_error, log_spotify_error
 from .serializers import FeedbackSubmissionSerializer
 from .recommendation_engine import RecommendationEngine
+from .hybrid_recommendation_engine import HybridRecommendationEngine
 
 class CsrfExemptSessionAuthentication(SessionAuthentication):
     def enforce_csrf(self, request):
@@ -251,15 +252,15 @@ def get_track_recommendations(request):
         # Initialize Spotify client
         sp = get_spotipy_client(spotify_token.access_token)
 
-        # Get recommendations using the engine
-        engine = RecommendationEngine(request.user)
-        recommended_tracks = engine.get_personalized_recommendations(sp, limit=18)
+        # Get recommendations using the hybrid engine
+        engine = HybridRecommendationEngine(request.user)
+        recommended_tracks = engine.get_recommendations(limit=18)
 
         if not recommended_tracks:
             logger.warning("No recommendations returned from engine")
             return JsonResponse({'recommendations': []})
 
-        logger.info(f"Processing {len(recommended_tracks)} recommendations")
+        logger.info(f"Processing {len(recommended_tracks)} hybrid recommendations")
         logger.info(f"Sample track format: {recommended_tracks[0] if recommended_tracks else 'No tracks'}")
 
         # Process recommendations for frontend
@@ -284,7 +285,9 @@ def get_track_recommendations(request):
                     'artist': artist_name,
                     'album': album_name,
                     'preview_url': track.get('preview_url'),
-                    'image_url': image_url
+                    'image_url': image_url,
+                    'source': track.get('source', 'unknown'),
+                    'score': track.get('score', 0.0)
                 }
                 processed_tracks.append(processed_track)
                 
@@ -331,6 +334,30 @@ def get_personalization_summary(request):
     except Exception as e:
         logger.error(f"Error getting personalization summary: {str(e)}")
         return JsonResponse({'error': 'Failed to get personalization summary'}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_profile_summary(request):
+    """Get a summary of the user's hybrid profile"""
+    try:
+        engine = HybridRecommendationEngine(request.user)
+        summary = engine.get_profile_summary()
+        return JsonResponse(summary)
+    except Exception as e:
+        logger.error(f"Error getting user profile summary: {str(e)}")
+        return JsonResponse({'error': 'Failed to get user profile summary'}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_user_profile(request):
+    """Manually trigger user profile update"""
+    try:
+        engine = HybridRecommendationEngine(request.user)
+        engine._update_profile_data()
+        return JsonResponse({'message': 'Profile updated successfully'})
+    except Exception as e:
+        logger.error(f"Error updating user profile: {str(e)}")
+        return JsonResponse({'error': 'Failed to update profile'}, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -534,6 +561,15 @@ def submit_feedback(request):
         from .personalization_engine import PersonalizationEngine
         personalization_engine = PersonalizationEngine(request.user)
         personalization_engine.apply_feedback_learning(feedback)
+        
+        # Also update hybrid profile
+        hybrid_engine = HybridRecommendationEngine(request.user)
+        track_info = {
+            'artist': track.artist,
+            'name': track.name,
+            'album': track.album
+        }
+        hybrid_engine.add_feedback(track.spotify_id, feedback.feedback_type, track_info)
         
         logger.info(f"Feedback processed: {feedback.feedback_type} for track {track.name}")
 

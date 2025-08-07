@@ -11,6 +11,8 @@ from datetime import timedelta
 from django.conf import settings
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+import time
+from collections import deque
 
 logger = logging.getLogger(__name__)
 
@@ -83,3 +85,59 @@ def update_or_create_user_tokens(user, access_token, token_type, expires_in, ref
     else:
         tokens = SpotifyToken(user=user, access_token=access_token, refresh_token=refresh_token, token_type=token_type, expires_in=expires_in)
         tokens.save()
+
+class RateLimitMonitor:
+    """
+    Monitors Spotify API rate limits to prevent hitting limits.
+    Tracks requests per second and per minute.
+    """
+    def __init__(self):
+        self.requests = deque()
+        self.rate_limit = 25  # requests per second
+        self.burst_limit = 100  # requests per minute
+        self.last_warning = 0
+    
+    def check_rate_limit(self):
+        """Check if we're approaching rate limits"""
+        now = time.time()
+        
+        # Remove old requests (older than 60 seconds)
+        while self.requests and now - self.requests[0] > 60:
+            self.requests.popleft()
+        
+        current_count = len(self.requests)
+        
+        # Check burst limit (requests per minute)
+        if current_count >= self.burst_limit:
+            if now - self.last_warning > 60:  # Only warn once per minute
+                logger.error("🚨 SPOTIFY API RATE LIMIT REACHED - BURST LIMIT EXCEEDED!")
+                self.last_warning = now
+            return False
+        
+        # Check if approaching limit (80% of burst limit)
+        if current_count >= self.burst_limit * 0.8:
+            if now - self.last_warning > 60:  # Only warn once per minute
+                logger.warning(f"⚠️ SPOTIFY API RATE LIMIT APPROACHING - {current_count}/{self.burst_limit} requests")
+                self.last_warning = now
+        
+        self.requests.append(now)
+        return True
+    
+    def get_current_usage(self):
+        """Get current API usage statistics"""
+        now = time.time()
+        
+        # Remove old requests
+        while self.requests and now - self.requests[0] > 60:
+            self.requests.popleft()
+        
+        current_count = len(self.requests)
+        return {
+            'current_requests': current_count,
+            'burst_limit': self.burst_limit,
+            'rate_limit': self.rate_limit,
+            'usage_percentage': (current_count / self.burst_limit) * 100
+        }
+
+# Global rate limit monitor instance
+rate_limit_monitor = RateLimitMonitor()

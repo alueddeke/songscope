@@ -150,3 +150,78 @@ class RecommendationLog(models.Model):
             track=track,
             action='RECOMMENDED'
         )
+
+class UserProfile(models.Model):
+    """
+    Stores user-specific recommendation data and preferences.
+    Uses JSON field for flexible data storage while maintaining structure.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    data = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'user_profiles'
+    
+    def __str__(self):
+        return f"Profile for {self.user.username}"
+    
+    @property
+    def is_fresh(self):
+        """Check if profile data is fresh (less than 1 day old)"""
+        from django.utils import timezone
+        from datetime import timedelta
+        return self.updated_at > timezone.now() - timedelta(days=1)
+    
+    def needs_update(self):
+        """Check if profile needs updating (more than 1 day old)"""
+        return not self.is_fresh
+    
+    def add_feedback(self, track_id, feedback_type, track_info=None):
+        """Add user feedback to profile"""
+        if 'preferences' not in self.data:
+            self.data['preferences'] = {}
+        if 'feedback_history' not in self.data['preferences']:
+            self.data['preferences']['feedback_history'] = []
+        
+        feedback_entry = {
+            'track_id': track_id,
+            'feedback_type': feedback_type,
+            'timestamp': timezone.now().isoformat()
+        }
+        
+        if track_info:
+            feedback_entry['track_info'] = track_info
+        
+        self.data['preferences']['feedback_history'].append(feedback_entry)
+        
+        # Update liked/disliked artists based on feedback
+        if track_info and 'artist' in track_info:
+            if feedback_type == 'LIKE':
+                if 'liked_artists' not in self.data['preferences']:
+                    self.data['preferences']['liked_artists'] = []
+                if track_info['artist'] not in self.data['preferences']['liked_artists']:
+                    self.data['preferences']['liked_artists'].append(track_info['artist'])
+            elif feedback_type == 'DISLIKE':
+                if 'disliked_artists' not in self.data['preferences']:
+                    self.data['preferences']['disliked_artists'] = []
+                if track_info['artist'] not in self.data['preferences']['disliked_artists']:
+                    self.data['preferences']['disliked_artists'].append(track_info['artist'])
+        
+        self.save()
+    
+    def get_recommendation_weights(self):
+        """Get current recommendation weights"""
+        return self.data.get('recommendation_weights', {
+            'playlist_mining': 0.3,
+            'artist_network': 0.25,
+            'contextual': 0.2,
+            'popularity': 0.15,
+            'feedback': 0.1
+        })
+    
+    def update_weights(self, new_weights):
+        """Update recommendation weights"""
+        self.data['recommendation_weights'] = new_weights
+        self.save()
