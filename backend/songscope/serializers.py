@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User, Group
 from rest_framework import serializers
+from .models import UserFeedback, AIFeedback
 
 class UserSerializer(serializers.HyperlinkedModelSerializer):
     # inherit from hyperlink model, using a hyperlink/url instead of typical primary key relationship
@@ -43,5 +44,14 @@ class UserProfileSerializer(serializers.Serializer):
 
 
 class FeedbackSubmissionSerializer(serializers.Serializer):
-    track_id = serializers.CharField()
-    feedback_type = serializers.ChoiceField(choices=['LIKE', 'DISLIKE', 'SKIP', 'SAVE'])
+    track_id = serializers.CharField(max_length=255)
+    feedback_type = serializers.ChoiceField(choices=[
+        ('LIKE', 'Like'),
+        ('DISLIKE', 'Dislike'),
+        ('SKIP', 'Skip'),
+        ('SAVE', 'Save'),
+    ])
+
+class AIFeedbackSubmissionSerializer(serializers.Serializer):
+    track_id = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    feedback_text = serializers.CharField(max_length=1000)

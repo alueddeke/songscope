@@ -25,11 +25,12 @@ import spotipy
 from spotipy.exceptions import SpotifyException
 from spotipy.oauth2 import SpotifyOAuth
 import numpy as np
-from .models import SpotifyToken, Track, UserFeedback, UserPreferences, RecommendationLog
+from .models import SpotifyToken, Track, UserFeedback, UserPreferences, RecommendationLog, AIFeedback
 from .logging_config import logger, log_api_error, log_spotify_error
-from .serializers import FeedbackSubmissionSerializer
+from .serializers import FeedbackSubmissionSerializer, AIFeedbackSubmissionSerializer
 from .recommendation_engine import RecommendationEngine
 from .hybrid_recommendation_engine import HybridRecommendationEngine
+from .ai_feedback_service import FeedbackInterpreter, RateLimitExceeded, CostLimitExceeded
 
 class CsrfExemptSessionAuthentication(SessionAuthentication):
     def enforce_csrf(self, request):
@@ -613,6 +614,76 @@ def submit_feedback(request):
     except Exception as e:
         logger.error(f"Error submitting feedback: {str(e)}")
         return JsonResponse({'error': 'Failed to submit feedback'}, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_ai_feedback(request):
+    """Handle AI-powered feedback submission"""
+    try:
+        serializer = AIFeedbackSubmissionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return JsonResponse({'error': serializer.errors}, status=400)
+
+        feedback_text = serializer.validated_data['feedback_text']
+        track_id = serializer.validated_data.get('track_id', '')
+        
+        # Get track info if provided
+        track_info = None
+        track = None
+        if track_id:
+            try:
+                track = Track.objects.get(spotify_id=track_id)
+                track_info = {
+                    'name': track.name,
+                    'artist': track.artist,
+                    'album': track.album
+                }
+            except Track.DoesNotExist:
+                logger.warning(f"Track {track_id} not found for AI feedback")
+        
+        # Initialize AI feedback interpreter
+        interpreter = FeedbackInterpreter()
+        
+        try:
+            # Interpret the feedback
+            interpretation = interpreter.interpret_feedback(feedback_text, track_info)
+            
+            # Store the AI feedback
+            ai_feedback = AIFeedback.objects.create(
+                user=request.user,
+                track=track,
+                original_text=feedback_text,
+                interpretation=interpretation,
+                confidence=interpretation.get('confidence', 0.0)
+            )
+            
+            # Update hybrid recommendation engine with AI feedback
+            hybrid_engine = HybridRecommendationEngine(request.user)
+            hybrid_engine.add_ai_feedback(interpretation, track_info)
+            
+            logger.info(f"AI feedback processed: {feedback_text[:50]}...")
+            
+            return JsonResponse({
+                'status': 'success',
+                'interpretation': interpretation,
+                'confidence': interpretation.get('confidence', 0.0)
+            })
+            
+        except RateLimitExceeded:
+            return JsonResponse({
+                'error': 'Rate limit exceeded. Please try again later.',
+                'status': 'rate_limit_exceeded'
+            }, status=429)
+            
+        except CostLimitExceeded as e:
+            return JsonResponse({
+                'error': 'Daily cost limit exceeded. Please try again tomorrow.',
+                'status': 'cost_limit_exceeded'
+            }, status=429)
+            
+    except Exception as e:
+        logger.error(f"Error submitting AI feedback: {str(e)}")
+        return JsonResponse({'error': 'Failed to process feedback'}, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

@@ -47,6 +47,7 @@ urlpatterns = [
     path('api/user-top-artists/', views.get_user_top_artists, name='user_top_artists'),
     path('api/recommendations/', views.get_track_recommendations, name='recommendations'),
     path('api/submit-feedback/', views.submit_feedback, name='submit_feedback'), 
+    path('api/submit-ai-feedback/', views.submit_ai_feedback, name='submit_ai_feedback'),
     path('api/check-track-feedback/<str:track_id>/', views.check_track_feedback, name='check_track_feedback'),
     path('api/csrf-token/', views.get_csrf_token, name='csrf_token'),
     path('api/get-user-name/', views.get_user_name, name='user_name'),

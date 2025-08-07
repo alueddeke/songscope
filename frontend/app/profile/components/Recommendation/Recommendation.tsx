@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { AudioPlayer } from "../AudioPlayer/AudioPlayer";
 import { AddToLiked } from "../AddToLiked/AddToLiked";
 import FeedbackButtonGroup from "../Feedback/FeedbackButtonGroup";
+import AIFeedbackInput from "../Feedback/AIFeedbackInput";
 import { get } from "../../../../services/axios";
 
 interface Track {
@@ -317,6 +318,19 @@ export default function Recommendation() {
               <div className="text-gray-300">End of Recommendations</div>
             )}
           </div>
+        </div>
+
+        {/* AI Feedback Section */}
+        <div className="mt-6">
+          <AIFeedbackInput 
+            trackId={currentTrack.id} 
+            onFeedbackSubmitted={() => {
+              // Optionally refresh recommendations after AI feedback
+              setTimeout(() => {
+                refreshRecommendations();
+              }, 2000);
+            }}
+          />
         </div>
       </div>
     </div>

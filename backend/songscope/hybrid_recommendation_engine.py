@@ -801,6 +801,75 @@ class HybridRecommendationEngine:
         except Exception as e:
             logger.error(f"Error removing feedback: {str(e)}")
     
+    def add_ai_feedback(self, interpretation: Dict, track_info: Dict = None):
+        """Add AI-interpreted feedback to user profile"""
+        try:
+            if 'preferences' not in self.profile.data:
+                self.profile.data['preferences'] = {}
+            
+            # Store AI feedback in profile
+            ai_feedback_history = self.profile.data['preferences'].get('ai_feedback_history', [])
+            ai_feedback_entry = {
+                'timestamp': timezone.now().isoformat(),
+                'interpretation': interpretation,
+                'track_info': track_info,
+                'confidence': interpretation.get('confidence', 0.0)
+            }
+            ai_feedback_history.append(ai_feedback_entry)
+            
+            # Keep only last 50 AI feedback entries
+            if len(ai_feedback_history) > 50:
+                ai_feedback_history = ai_feedback_history[-50:]
+            
+            self.profile.data['preferences']['ai_feedback_history'] = ai_feedback_history
+            
+            # Update recommendation weights based on AI feedback
+            self._update_weights_from_ai_feedback(interpretation)
+            
+            self.profile.save()
+            logger.info(f"Added AI feedback to profile: {interpretation}")
+            
+        except Exception as e:
+            logger.error(f"Error adding AI feedback: {str(e)}")
+    
+    def _update_weights_from_ai_feedback(self, interpretation: Dict):
+        """Update recommendation weights based on AI feedback"""
+        try:
+            weights = self.profile.get_recommendation_weights()
+            
+            # Apply AI feedback to weights
+            if interpretation.get('tempo_preference') == 'faster':
+                weights['tempo_weight'] = min(weights.get('tempo_weight', 1.0) + 0.1, 2.0)
+            elif interpretation.get('tempo_preference') == 'slower':
+                weights['tempo_weight'] = max(weights.get('tempo_weight', 1.0) - 0.1, 0.1)
+            
+            if interpretation.get('energy_preference') == 'higher':
+                weights['energy_weight'] = min(weights.get('energy_weight', 1.0) + 0.1, 2.0)
+            elif interpretation.get('energy_preference') == 'lower':
+                weights['energy_weight'] = max(weights.get('energy_weight', 1.0) - 0.1, 0.1)
+            
+            if interpretation.get('mood_preference') == 'happier':
+                weights['valence_weight'] = min(weights.get('valence_weight', 1.0) + 0.1, 2.0)
+            elif interpretation.get('mood_preference') == 'sadder':
+                weights['valence_weight'] = max(weights.get('valence_weight', 1.0) - 0.1, 0.1)
+            
+            # Store specific artists/genres to avoid/prefer
+            if interpretation.get('specific_artists'):
+                if 'avoid_artists' not in weights:
+                    weights['avoid_artists'] = []
+                weights['avoid_artists'].extend(interpretation['specific_artists'])
+            
+            if interpretation.get('specific_genres'):
+                if 'prefer_genres' not in weights:
+                    weights['prefer_genres'] = []
+                weights['prefer_genres'].extend(interpretation['specific_genres'])
+            
+            self.profile.update_weights(weights)
+            logger.info(f"Updated weights from AI feedback: {weights}")
+            
+        except Exception as e:
+            logger.error(f"Error updating weights from AI feedback: {str(e)}")
+    
     def get_profile_summary(self) -> Dict:
         """Get summary of user profile"""
         return {

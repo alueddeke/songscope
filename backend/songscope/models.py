@@ -72,6 +72,22 @@ class UserFeedback(models.Model):
     track_features = models.JSONField(null=True, blank=True)
 
 
+class AIFeedback(models.Model):
+    """Store AI-interpreted feedback from natural language"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    track = models.ForeignKey(Track, on_delete=models.CASCADE, null=True, blank=True)
+    original_text = models.TextField()  # User's original feedback text
+    interpretation = models.JSONField()  # AI interpretation
+    confidence = models.FloatField(default=0.0)  # AI confidence score
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"AI Feedback for {self.user.username} - {self.original_text[:50]}"
+
+
 class UserPreferences(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     # Weights for different audio features
