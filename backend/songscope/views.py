@@ -174,18 +174,35 @@ def get_user_recently_played(request):
 
 @login_required
 def get_user_top_artists(request):
-    """Get user's top artists using Spotipy"""
+    """Get user's top artists using Spotipy with time range filter"""
     try:
+        # Get time range from query parameters
+        time_range = request.GET.get('time_range', 'week')
+        
+        # Validate time range and map to Spotify API values
+        # Note: Spotify API limitations - we can only use their predefined ranges
+        # short_term = ~4 weeks, medium_term = ~6 months, long_term = ~12 months
+        valid_time_ranges = {
+            '4 weeks': 'short_term',      # Last ~4 weeks (closest to 7 days)
+            '6 months': 'medium_term',    # Last ~6 months (closest to 30 days) 
+            'year': 'long_term'        # Last ~12 months
+        }
+        
+        if time_range not in valid_time_ranges:
+            time_range = '4 weeks'  # Default to 4 weeks
+        
+        spotify_time_range = valid_time_ranges[time_range]
+        
         spotify_token = SpotifyToken.objects.get(user=request.user)
         if spotify_token.is_expired():
             spotify_token = refresh_spotify_token(spotify_token)
         
         sp = get_spotipy_client(spotify_token.access_token)
         
-        # Single method call instead of raw request
+        # Get top artists with specified time range
         top_artists = sp.current_user_top_artists(
-            limit=12,
-            time_range='short_term'
+            limit=20,  # Increased limit for better variety
+            time_range=spotify_time_range
         )
         
         artists_data = [{
@@ -193,10 +210,17 @@ def get_user_top_artists(request):
             'name': artist['name'],
             'genres': artist['genres'],
             'popularity': artist['popularity'],
-            'images': artist['images']
+            'images': artist['images'],
+            'time_range': time_range  # Include the time range in response
         } for artist in top_artists['items']]
         
-        return JsonResponse({'top_artists': artists_data})
+        logger.info(f"Retrieved {len(artists_data)} top artists for time range: {time_range}")
+        
+        return JsonResponse({
+            'top_artists': artists_data,
+            'time_range': time_range,
+            'total_count': len(artists_data)
+        })
         
     except SpotifyException as e:
         logger.error(f"Spotify API error: {str(e)}")
@@ -748,6 +772,173 @@ def add_track_to_liked(request):
 
         return JsonResponse({'message': "all good"})
 
+    except SpotifyException as e:
+        logger.error(f"Spotify API error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=e.http_status)
+    except SpotifyToken.DoesNotExist:
+        return JsonResponse({'error': 'Spotify token not found'}, status=404)
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+def get_artist_details(request, artist_id):
+    """Get detailed information about a specific artist"""
+    try:
+        spotify_token = SpotifyToken.objects.get(user=request.user)
+        if spotify_token.is_expired():
+            spotify_token = refresh_spotify_token(spotify_token)
+        
+        sp = get_spotipy_client(spotify_token.access_token)
+        
+        # Get detailed artist information
+        artist = sp.artist(artist_id)
+        
+        # Get artist's top tracks (globally popular)
+        top_tracks = sp.artist_top_tracks(artist_id, country='US')
+        
+        # Get latest albums
+        albums = sp.artist_albums(
+            artist_id, 
+            album_type='album,single',
+            limit=1,  # Only get the latest release
+            country='US'
+        )
+        
+        # Get user's recently played tracks and filter by this artist
+        recently_played = sp.current_user_recently_played(limit=50)
+        recent_tracks_by_artist = [
+            track for track in recently_played['items'] 
+            if track['track']['artists'][0]['id'] == artist_id
+        ][:5]  # Top 5 most recently played by this artist
+        
+        # Get user's top tracks and filter by this artist
+        user_top_tracks = sp.current_user_top_tracks(limit=50, time_range='medium_term')
+        top_tracks_by_artist = [
+            track for track in user_top_tracks['items'] 
+            if track['artists'][0]['id'] == artist_id
+        ][:5]  # Top 5 from user's top tracks
+        
+        # Get user's liked songs and filter by this artist
+        liked_songs = sp.current_user_saved_tracks(limit=50)
+        liked_tracks_by_artist = [
+            track for track in liked_songs['items'] 
+            if track['track']['artists'][0]['id'] == artist_id
+        ][:5]  # Top 5 liked tracks by this artist
+        
+        # Combine and deduplicate tracks, prioritizing top tracks first
+        combined_tracks = []
+        seen_track_ids = set()
+        
+        # Add top tracks first (highest priority)
+        for track in top_tracks_by_artist:
+            if track['id'] not in seen_track_ids:
+                combined_tracks.append({
+                    'id': track['id'],
+                    'name': track['name'],
+                    'album': track['album']['name'],
+                    'image': track['album']['images'][0]['url'] if track['album']['images'] else None,
+                    'preview_url': track['preview_url'],
+                    'external_urls': track['external_urls'],
+                    'source': 'top_tracks'
+                })
+                seen_track_ids.add(track['id'])
+        
+        # Add recent tracks (second priority, only if not already included)
+        for track in recent_tracks_by_artist:
+            if track['track']['id'] not in seen_track_ids and len(combined_tracks) < 5:
+                combined_tracks.append({
+                    'id': track['track']['id'],
+                    'name': track['track']['name'],
+                    'album': track['track']['album']['name'],
+                    'image': track['track']['album']['images'][0]['url'] if track['track']['album']['images'] else None,
+                    'preview_url': track['track']['preview_url'],
+                    'external_urls': track['track']['external_urls'],
+                    'source': 'recent_tracks'
+                })
+                seen_track_ids.add(track['track']['id'])
+        
+        # Add liked tracks (third priority, only if not already included)
+        for track in liked_tracks_by_artist:
+            if track['track']['id'] not in seen_track_ids and len(combined_tracks) < 5:
+                combined_tracks.append({
+                    'id': track['track']['id'],
+                    'name': track['track']['name'],
+                    'album': track['track']['album']['name'],
+                    'image': track['track']['album']['images'][0]['url'] if track['track']['album']['images'] else None,
+                    'preview_url': track['track']['preview_url'],
+                    'external_urls': track['track']['external_urls'],
+                    'source': 'liked_songs'
+                })
+                seen_track_ids.add(track['track']['id'])
+        
+        # If we still don't have 5 tracks, add some from artist's albums as fallback (fourth priority)
+        if len(combined_tracks) < 5:
+            try:
+                albums = sp.artist_albums(artist_id, album_type='album,single', limit=5)
+                for album in albums['items']:
+                    album_tracks = sp.album_tracks(album['id'])
+                    for track in album_tracks['items']:
+                        if track['id'] not in seen_track_ids and len(combined_tracks) < 5:
+                            combined_tracks.append({
+                                'id': track['id'],
+                                'name': track['name'],
+                                'album': album['name'],
+                                'image': album['images'][0]['url'] if album['images'] else None,
+                                'preview_url': track['preview_url'],
+                                'external_urls': track['external_urls'],
+                                'source': 'artist_albums'
+                            })
+                            seen_track_ids.add(track['id'])
+                        if len(combined_tracks) >= 5:
+                            break
+                    if len(combined_tracks) >= 5:
+                        break
+            except Exception as e:
+                logger.warning(f"Could not get fallback tracks for artist {artist_id}: {str(e)}")
+        
+        user_tracks_by_artist = combined_tracks[:5]  # Ensure exactly 5 tracks
+        
+        artist_data = {
+            'id': artist['id'],
+            'name': artist['name'],
+            'genres': artist['genres'],
+            'popularity': artist['popularity'],
+            'images': artist['images'],
+            'followers': artist['followers']['total'],
+            'external_urls': artist['external_urls'],
+            'bio': None,  # Spotify doesn't provide bio in artist endpoint
+            'top_tracks': [{
+                'id': track['id'],
+                'name': track['name'],
+                'album': track['album']['name'],
+                'image': track['album']['images'][0]['url'] if track['album']['images'] else None,
+                'preview_url': track['preview_url'],
+                'external_urls': track['external_urls']
+            } for track in top_tracks['tracks'][:5]],  # Top 5 tracks
+            'latest_album': {
+                'id': albums['items'][0]['id'],
+                'name': albums['items'][0]['name'],
+                'type': albums['items'][0]['album_type'],
+                'release_date': albums['items'][0]['release_date'],
+                'image': albums['items'][0]['images'][0]['url'] if albums['items'][0]['images'] else None,
+                'total_tracks': albums['items'][0]['total_tracks']
+            } if albums['items'] else None,  # Latest album (single object)
+            'user_top_tracks': [{
+                'id': track['id'],
+                'name': track['name'],
+                'album': track['album'],
+                'image': track['image'],
+                'preview_url': track['preview_url'],
+                'external_urls': track['external_urls'],
+                'source': track['source']
+            } for track in user_tracks_by_artist]
+        }
+        
+        logger.info(f"Retrieved detailed info for artist: {artist['name']}")
+        
+        return JsonResponse(artist_data)
+        
     except SpotifyException as e:
         logger.error(f"Spotify API error: {str(e)}")
         return JsonResponse({'error': str(e)}, status=e.http_status)

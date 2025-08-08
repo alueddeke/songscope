@@ -45,6 +45,7 @@ urlpatterns = [
     path('api/user-top-tracks/', views.get_user_top_tracks, name='user_top_tracks'),
     path('api/user-recently-played/', views.get_user_recently_played, name='user_recently_played'),
     path('api/user-top-artists/', views.get_user_top_artists, name='user_top_artists'),
+    path('api/artist-details/<str:artist_id>/', views.get_artist_details, name='artist_details'),
     path('api/recommendations/', views.get_track_recommendations, name='recommendations'),
     path('api/submit-feedback/', views.submit_feedback, name='submit_feedback'), 
     path('api/submit-ai-feedback/', views.submit_ai_feedback, name='submit_ai_feedback'),
