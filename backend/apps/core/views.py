@@ -1,4 +1,9 @@
 import json
+import time
+import logging
+import os
+import requests
+import numpy as np
 from django.shortcuts import redirect
 from django.conf import settings
 from django.http import JsonResponse
@@ -7,30 +12,24 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.utils import timezone
+from datetime import timedelta
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
 from requests_oauthlib import OAuth2Session
-from .models import SpotifyToken
-import time
-import logging
-from django.utils import timezone
-from datetime import timedelta
-import os
-from django.http import JsonResponse
-from apps.spotify.utils import get_spotipy_client, refresh_spotify_token
-import requests
-from apps.recommendations.feature_extractor import extract_current_user_profile, get_recommendations
 import spotipy
 from spotipy.exceptions import SpotifyException
 from spotipy.oauth2 import SpotifyOAuth
-import numpy as np
+
 from .models import SpotifyToken, Track, UserFeedback, UserPreferences, RecommendationLog, AIFeedback
-from utils.logging_config import logger, log_api_error, log_spotify_error
 from .serializers import FeedbackSubmissionSerializer, AIFeedbackSubmissionSerializer
+from apps.spotify.utils import get_spotipy_client, refresh_spotify_token
+from apps.recommendations.feature_extractor import extract_current_user_profile, get_recommendations
 from apps.recommendations.recommendation_engine import RecommendationEngine
 from apps.recommendations.hybrid_recommendation_engine import HybridRecommendationEngine
 from apps.ai.ai_feedback_service import FeedbackInterpreter, RateLimitExceeded, CostLimitExceeded
+from utils.logging_config import logger, log_api_error, log_spotify_error
 
 class CsrfExemptSessionAuthentication(SessionAuthentication):
     def enforce_csrf(self, request):
@@ -87,9 +86,7 @@ def spotify_callback(request):
             defaults={
                 'access_token': token['access_token'],
                 'refresh_token': token.get('refresh_token'),
-                'expires_in': token['expires_in'],
                 'expires_at': expires_at,
-                'token_type': token['token_type'],
             }
         )
         
@@ -524,7 +521,7 @@ def refresh_spotify_token(spotify_token):
         new_token_info = response.json()
         
         spotify_token.access_token = new_token_info['access_token']
-        spotify_token.expires_at = int(new_token_info['expires_in']) + int(time.time())
+        spotify_token.expires_at = timezone.now() + timedelta(seconds=new_token_info['expires_in'])
         if 'refresh_token' in new_token_info:
             spotify_token.refresh_token = new_token_info['refresh_token']
         spotify_token.save()

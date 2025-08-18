@@ -7,6 +7,9 @@ This module contains the core models for user management and basic functionality
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SpotifyToken(models.Model):
@@ -32,11 +35,96 @@ class UserProfile(models.Model):
     spotify_user_id = models.CharField(max_length=255, blank=True, null=True)
     favorite_genres = models.JSONField(default=list, blank=True)
     favorite_artists = models.JSONField(default=list, blank=True)
+    data = models.JSONField(default=dict, blank=True)  # Store profile data
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Profile for {self.user.username}"
+    
+    def get_from_cache(self, limit=20):
+        """Get recommendations from cache"""
+        try:
+            cache_data = self.data.get('cache', {})
+            if cache_data and cache_data.get('recommendations'):
+                return cache_data['recommendations'][:limit]
+            return None
+        except Exception as e:
+            logger.error(f"Error getting from cache: {str(e)}")
+            return None
+    
+    def get_cache_stats(self):
+        """Get cache statistics"""
+        try:
+            cache_data = self.data.get('cache', {})
+            return {
+                'has_cache': bool(cache_data.get('recommendations')),
+                'cache_size': len(cache_data.get('recommendations', [])),
+                'last_updated': cache_data.get('last_updated'),
+                'cache_hits': cache_data.get('hits', 0),
+                'cache_misses': cache_data.get('misses', 0)
+            }
+        except Exception as e:
+            logger.error(f"Error getting cache stats: {str(e)}")
+            return {'error': str(e)}
+    
+    def clear_cache(self):
+        """Clear the recommendation cache"""
+        try:
+            if 'cache' in self.data:
+                self.data['cache'] = {}
+                self.save(update_fields=['data'])
+        except Exception as e:
+            logger.error(f"Error clearing cache: {str(e)}")
+    
+    def update_cache(self, recommendations):
+        """Update the recommendation cache"""
+        try:
+            if 'cache' not in self.data:
+                self.data['cache'] = {}
+            
+            self.data['cache']['recommendations'] = recommendations
+            self.data['cache']['last_updated'] = timezone.now().isoformat()
+            self.save(update_fields=['data'])
+        except Exception as e:
+            logger.error(f"Error updating cache: {str(e)}")
+    
+    def add_feedback(self, track_id, feedback_type, track_info=None):
+        """Add feedback to the user's profile data"""
+        try:
+            if 'feedback_history' not in self.data:
+                self.data['feedback_history'] = []
+            
+            feedback_entry = {
+                'track_id': track_id,
+                'feedback_type': feedback_type,
+                'timestamp': timezone.now().isoformat(),
+                'track_info': track_info or {}
+            }
+            
+            self.data['feedback_history'].append(feedback_entry)
+            
+            # Keep only last 100 feedback entries to prevent data bloat
+            if len(self.data['feedback_history']) > 100:
+                self.data['feedback_history'] = self.data['feedback_history'][-100:]
+            
+            self.save(update_fields=['data'])
+            logger.info(f"Added feedback to profile: {feedback_type} for track {track_id}")
+        except Exception as e:
+            logger.error(f"Error adding feedback to profile: {str(e)}")
+    
+    def remove_feedback(self, track_id):
+        """Remove feedback for a specific track"""
+        try:
+            if 'feedback_history' in self.data:
+                self.data['feedback_history'] = [
+                    f for f in self.data['feedback_history'] 
+                    if f.get('track_id') != track_id
+                ]
+                self.save(update_fields=['data'])
+                logger.info(f"Removed feedback for track {track_id}")
+        except Exception as e:
+            logger.error(f"Error removing feedback: {str(e)}")
 
 
 class Track(models.Model):
@@ -47,6 +135,7 @@ class Track(models.Model):
     album = models.CharField(max_length=255, blank=True)
     duration_ms = models.IntegerField(default=0)
     popularity = models.IntegerField(default=0)
+    genres = models.JSONField(default=list, blank=True)  # Store artist genres
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -60,6 +149,14 @@ class UserFeedback(models.Model):
     feedback_text = models.TextField(blank=True)
     rating = models.IntegerField(choices=[(i, i) for i in range(1, 6)], null=True, blank=True)
     liked = models.BooleanField(null=True, blank=True)
+    feedback_type = models.CharField(max_length=20, choices=[
+        ('LIKE', 'Like'),
+        ('DISLIKE', 'Dislike'),
+        ('SAVE', 'Save'),
+        ('SKIP', 'Skip'),
+        ('PLAY', 'Play')
+    ], blank=True)
+    track_features = models.JSONField(default=dict, blank=True)  # Store track audio features
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -110,3 +207,28 @@ class RecommendationLog(models.Model):
 
     def __str__(self):
         return f"Recommendation for {self.user.username}: {self.track.name}"
+    
+    @classmethod
+    def log_recommendation(cls, user, track):
+        """Log a track recommendation"""
+        try:
+            cls.objects.create(user=user, track=track)
+        except Exception as e:
+            logger.error(f"Error logging recommendation: {str(e)}")
+    
+    @classmethod
+    def log_error(cls, user, error_message):
+        """Log an error during recommendation generation"""
+        try:
+            # Create a dummy track for error logging
+            track, _ = Track.objects.get_or_create(
+                spotify_id='error_log',
+                defaults={'name': 'Error Log', 'artist': 'System', 'album': 'Error'}
+            )
+            cls.objects.create(
+                user=user, 
+                track=track, 
+                feedback=f"Error: {error_message}"
+            )
+        except Exception as e:
+            logger.error(f"Error logging error: {str(e)}")
