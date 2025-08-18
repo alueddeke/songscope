@@ -12,14 +12,18 @@ This approach avoids the problematic Spotify recommendations API while still
 providing personalized music discovery.
 """
 
-from django.db.models import Q
-from datetime import timedelta
-from django.utils import timezone
-import random
-from typing import Dict, List, Optional
-from .models import UserFeedback, Track
-from .personalization_engine import PersonalizationEngine
+import numpy as np
 import logging
+from typing import List, Dict, Any, Optional, Tuple
+from django.utils import timezone
+from datetime import datetime, timedelta
+import json
+from collections import defaultdict
+import spotipy
+from spotipy.exceptions import SpotifyException
+from django.conf import settings
+from apps.core.models import UserFeedback, Track
+from .personalization_engine import PersonalizationEngine
 
 logger = logging.getLogger(__name__)
 

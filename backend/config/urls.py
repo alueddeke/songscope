@@ -1,5 +1,5 @@
 """
-URL configuration for backend project.
+URL configuration for SongScope project.
 
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/5.0/topics/http/urls/
@@ -18,8 +18,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
-from songscope import views
-from songscope.views import spotify_login, spotify_callback
+from apps.core import views
 
 
 # this is where you would define routes - your get one, post one, etc...

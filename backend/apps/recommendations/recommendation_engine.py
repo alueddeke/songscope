@@ -2,11 +2,11 @@ from django.db.models import Avg, F, Value, FloatField
 from datetime import timedelta
 from django.utils import timezone
 import numpy as np
-from typing import Dict, List, Optional
-from .models import UserPreferences, UserFeedback, Track
+import logging
+from typing import List, Dict, Any
+from apps.core.models import UserPreferences, UserFeedback, Track
 from .personalization_engine import PersonalizationEngine
 from .track_discovery_engine import TrackDiscoveryEngine
-import logging
 
 logger = logging.getLogger(__name__)
 

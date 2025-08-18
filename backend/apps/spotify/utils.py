@@ -4,7 +4,7 @@ import base64
 import hashlib
 import os
 import logging
-from .models import SpotifyToken
+from apps.core.models import SpotifyToken
 import requests
 from django.utils import timezone
 from datetime import timedelta

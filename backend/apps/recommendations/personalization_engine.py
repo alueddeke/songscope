@@ -11,13 +11,17 @@ Key Concepts:
 4. Time-based and context-aware personalization
 """
 
-from django.db.models import Avg, Count
-from datetime import timedelta, datetime
-from django.utils import timezone
 import numpy as np
-from typing import Dict, List, Optional, Tuple
-from .models import UserPreferences, UserFeedback, Track
 import logging
+from typing import List, Dict, Any, Optional
+from django.utils import timezone
+from datetime import datetime, timedelta
+import json
+from collections import defaultdict
+import spotipy
+from spotipy.exceptions import SpotifyException
+from django.conf import settings
+from apps.core.models import UserPreferences, UserFeedback, Track
 
 logger = logging.getLogger(__name__)
 

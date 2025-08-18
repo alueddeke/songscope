@@ -229,7 +229,7 @@ export default function AIFeedbackInput({ trackId, onFeedbackSubmitted }: AIFeed
 
       {/* Quick Examples */}
       <div className="text-gray-400 text-xs">
-        <p className="mb-2 font-medium">🎯 Quick Examples:</p>
+        <p className="mb-2 font-medium">Quick Examples:</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
           <div className="space-y-1">
             <div className="text-green">Tempo & Energy:</div>

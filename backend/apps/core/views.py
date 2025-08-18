@@ -18,19 +18,19 @@ from django.utils import timezone
 from datetime import timedelta
 import os
 from django.http import JsonResponse
-from .utils import get_spotipy_client, refresh_spotify_token
+from apps.spotify.utils import get_spotipy_client, refresh_spotify_token
 import requests
-from .feature_extractor import extract_current_user_profile, get_recommendations
+from apps.recommendations.feature_extractor import extract_current_user_profile, get_recommendations
 import spotipy
 from spotipy.exceptions import SpotifyException
 from spotipy.oauth2 import SpotifyOAuth
 import numpy as np
 from .models import SpotifyToken, Track, UserFeedback, UserPreferences, RecommendationLog, AIFeedback
-from .logging_config import logger, log_api_error, log_spotify_error
+from utils.logging_config import logger, log_api_error, log_spotify_error
 from .serializers import FeedbackSubmissionSerializer, AIFeedbackSubmissionSerializer
-from .recommendation_engine import RecommendationEngine
-from .hybrid_recommendation_engine import HybridRecommendationEngine
-from .ai_feedback_service import FeedbackInterpreter, RateLimitExceeded, CostLimitExceeded
+from apps.recommendations.recommendation_engine import RecommendationEngine
+from apps.recommendations.hybrid_recommendation_engine import HybridRecommendationEngine
+from apps.ai.ai_feedback_service import FeedbackInterpreter, RateLimitExceeded, CostLimitExceeded
 
 class CsrfExemptSessionAuthentication(SessionAuthentication):
     def enforce_csrf(self, request):

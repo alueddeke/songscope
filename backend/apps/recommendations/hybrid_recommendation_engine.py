@@ -9,14 +9,20 @@ This engine implements a sophisticated recommendation system that:
 5. Respects Spotify API rate limits and terms of service
 """
 
+import numpy as np
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple
 from django.utils import timezone
-from datetime import timedelta
+from datetime import datetime, timedelta
 import json
-
-from .models import UserProfile, Track, UserFeedback
-from .utils import rate_limit_monitor, get_spotipy_client
+import random
+from collections import defaultdict
+import spotipy
+from spotipy.exceptions import SpotifyException
+from django.conf import settings
+from apps.core.models import UserProfile, Track, UserFeedback
+from apps.core.models import SpotifyToken
+from apps.spotify.utils import rate_limit_monitor, get_spotipy_client
 from .track_discovery_engine import TrackDiscoveryEngine
 
 logger = logging.getLogger(__name__)
@@ -130,7 +136,6 @@ class HybridRecommendationEngine:
             scored_recommendations = self._score_recommendations(unique_recommendations)
             
             # Add more randomization for variety
-            import random
             # Shuffle multiple times for better randomization
             for _ in range(3):
                 random.shuffle(scored_recommendations)
@@ -218,7 +223,6 @@ class HybridRecommendationEngine:
     def _update_profile_data(self):
         """Update user profile with fresh data from Spotify"""
         try:
-            from .models import SpotifyToken
             spotify_token = SpotifyToken.objects.filter(user=self.user).first()
             if not spotify_token or spotify_token.is_expired():
                 logger.error("No valid Spotify token available for profile update")
@@ -550,7 +554,6 @@ class HybridRecommendationEngine:
     def _get_spotify_client(self):
         """Get Spotify client with error handling"""
         try:
-            from .models import SpotifyToken
             spotify_token = SpotifyToken.objects.filter(user=self.user).first()
             if not spotify_token or spotify_token.is_expired():
                 return None
