@@ -226,9 +226,30 @@ class RecommendationLog(models.Model):
                 defaults={'name': 'Error Log', 'artist': 'System', 'album': 'Error'}
             )
             cls.objects.create(
-                user=user, 
-                track=track, 
+                user=user,
+                track=track,
                 feedback=f"Error: {error_message}"
             )
         except Exception as e:
             logger.error(f"Error logging error: {str(e)}")
+
+
+class DailyGem(models.Model):
+    """One recommended track per user per day — the core horoscope feature."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    track = models.ForeignKey(Track, on_delete=models.CASCADE)
+    date = models.DateField(default=timezone.localdate)
+    explanation = models.TextField(blank=True)
+    image_url = models.URLField(max_length=500, blank=True)
+    preview_url = models.URLField(max_length=500, blank=True)
+    track_popularity = models.IntegerField(default=0)
+    was_liked = models.BooleanField(null=True, blank=True)
+    was_skipped = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['user', 'date']
+        ordering = ['-date']
+
+    def __str__(self):
+        return f"Daily Gem for {self.user.username} on {self.date}: {self.track.name}"
