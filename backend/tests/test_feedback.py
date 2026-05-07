@@ -170,8 +170,7 @@ class TestDailyGemWasLikedSync(TestCase):
 
         self.assertEqual(response.status_code, 200, response.content)
         self.gem.refresh_from_db()
-        self.assertFalse(self.gem.was_liked)
-        self.assertIsNotNone(self.gem.was_liked)
+        self.assertIs(self.gem.was_liked, False)
 
     @patch('apps.core.views.HybridRecommendationEngine')
     @patch('apps.recommendations.personalization_engine.PersonalizationEngine')
