@@ -71,7 +71,7 @@ def run_django_tests():
     print("=" * 50)
     
     # Set up Django
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
     
     try:
         import django
