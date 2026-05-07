@@ -359,7 +359,7 @@ def debug_auth(request):
 def get_personalization_summary(request):
     """Get a summary of the user's personalization profile"""
     try:
-        from .personalization_engine import PersonalizationEngine
+        from apps.recommendations.personalization_engine import PersonalizationEngine
         personalization_engine = PersonalizationEngine(request.user)
         summary = personalization_engine.get_personalization_summary()
         return JsonResponse(summary)
@@ -596,7 +596,7 @@ def submit_feedback(request):
             logger.info(f"Removed LIKE feedback for track {track.name}")
             
             # Update recommendations to reflect the removal
-            from .personalization_engine import PersonalizationEngine
+            from apps.recommendations.personalization_engine import PersonalizationEngine
             personalization_engine = PersonalizationEngine(request.user)
             personalization_engine.remove_feedback_learning(track.spotify_id)
             
@@ -624,7 +624,7 @@ def submit_feedback(request):
             )
 
             # Update recommendations using the enhanced personalization engine
-            from .personalization_engine import PersonalizationEngine
+            from apps.recommendations.personalization_engine import PersonalizationEngine
             personalization_engine = PersonalizationEngine(request.user)
             personalization_engine.apply_feedback_learning(feedback)
             
