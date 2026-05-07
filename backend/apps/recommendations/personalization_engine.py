@@ -276,27 +276,9 @@ class PersonalizationEngine:
         """
         logger.info(f"Removing feedback learning for track {track_id}")
         
-        # Find and remove the feedback entry
-        try:
-            track = Track.objects.get(spotify_id=track_id)
-            feedback = UserFeedback.objects.filter(
-                user=self.user,
-                track=track,
-                feedback_type='LIKE'
-            ).first()
-            
-            if feedback:
-                # Remove the feedback entry
-                feedback.delete()
-                logger.info(f"Removed LIKE feedback for track {track.name}")
-                
-                # Optionally, we could reverse the learning effects here
-                # For now, we just remove the feedback entry
-                
-        except Track.DoesNotExist:
-            logger.warning(f"Track {track_id} not found when removing feedback")
-        except Exception as e:
-            logger.error(f"Error removing feedback learning: {str(e)}")
+        # Learning reversal will be wired in Phase 2.
+        # Do NOT delete the feedback record here — the view already did it.
+        logger.info(f"Removing feedback learning for track {track_id}")
     
     def get_personalization_summary(self) -> Dict:
         """
