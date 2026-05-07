@@ -21,6 +21,7 @@ from collections import defaultdict
 import spotipy
 from spotipy.exceptions import SpotifyException
 from django.conf import settings
+from django.db.models import Count
 from apps.core.models import UserPreferences, UserFeedback, Track
 
 logger = logging.getLogger(__name__)
@@ -250,21 +251,21 @@ class PersonalizationEngine:
     def apply_feedback_learning(self, feedback: UserFeedback):
         """
         Update user preferences based on new feedback.
-        
-        This is the core learning mechanism that adapts the system
-        based on user interactions.
-        
-        Args:
-            feedback: New user feedback to learn from
+
+        Phase 1: no-op — taste vector update wired in Phase 2.
+        Root cause of removed body: UserPreferences has no update_weights method.
+        The update_weights(self, weights) method exists only on UserProfile (models.py:~151)
+        and takes 1 argument, not 2. Calling it from here was a crash on every LIKE/DISLIKE.
+
+        TODO Phase 2: build weights_dict from feedback.track_features and call:
+            UserProfile.objects.get(user=self.user).update_weights(weights_dict)
+        where weights_dict shape matches what UserProfile.update_weights expects.
         """
-        logger.info(f"Learning from feedback: {feedback.feedback_type} for track {feedback.track.name}")
-        
-        # Update the user preferences model
-        if feedback.track_features:
-            self.preferences.update_weights(feedback, feedback.track_features)
-        
-        # Log the learning event
-        logger.info(f"Updated preferences for user {self.user.id} based on {feedback.feedback_type}")
+        logger.info(
+            "apply_feedback_learning: Phase 1 no-op for %s on %s",
+            feedback.feedback_type,
+            feedback.track.name,
+        )
     
     def remove_feedback_learning(self, track_id: str):
         """
