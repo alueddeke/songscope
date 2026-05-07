@@ -347,14 +347,13 @@ def check_auth(request):
     return JsonResponse({'authenticated': True})
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def debug_auth(request):
     """Debug endpoint to check authentication status"""
     return JsonResponse({
         'authenticated': request.user.is_authenticated,
         'user_id': request.user.id if request.user.is_authenticated else None,
         'username': request.user.username if request.user.is_authenticated else None,
-        'session_id': request.session.session_key,
-        'cookies': dict(request.COOKIES)
     })
 
 @api_view(['GET'])
