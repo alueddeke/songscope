@@ -119,7 +119,7 @@ Only include fields that are clearly indicated in the feedback. Be conservative 
             from django.conf import settings
             
             # Set up Django
-            os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
+            os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
             django.setup()
             
             # Test FeedbackInterpreter
