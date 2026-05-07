@@ -510,30 +510,6 @@ def get_simple_recommendations(request):
         logger.error(f"Error in get_simple_recommendations: {str(e)}")
         return JsonResponse({'error': f'Failed: {str(e)}'}, status=500)
 
-def refresh_spotify_token(spotify_token):
-    refresh_token = spotify_token.refresh_token
-    
-    response = requests.post(token_url, data={
-        'grant_type': 'refresh_token',
-        'refresh_token': refresh_token,
-        'client_id': client_id,
-        'client_secret': client_secret
-    })
-    
-    if response.status_code == 200:
-        new_token_info = response.json()
-        
-        spotify_token.access_token = new_token_info['access_token']
-        spotify_token.expires_at = timezone.now() + timedelta(seconds=new_token_info['expires_in'])
-        if 'refresh_token' in new_token_info:
-            spotify_token.refresh_token = new_token_info['refresh_token']
-        spotify_token.save()
-    else:
-        raise Exception('Could not refresh Spotify token')
-    
-    return spotify_token
-
-
 def get_spotify_api_client(access_token):
     """
     Create a Spotify API client using the access token
