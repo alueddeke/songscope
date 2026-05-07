@@ -125,7 +125,15 @@ class HybridRecommendationEngine:
                 contextual_recs = self._get_contextual_recommendations(limit * 3)  # Get more to shuffle
                 all_recommendations.extend(contextual_recs)
                 logger.info(f"Contextual analysis found {len(contextual_recs)} recommendations")
-            
+
+            # Strategy 5: Related Artist Deep Cuts (Bug 7 fix — was missing)
+            if self._check_rate_limit():
+                related_recs = self._get_related_artist_recommendations(limit * 2)
+                all_recommendations.extend(related_recs)
+                logger.info(
+                    f"Related artist strategy found {len(related_recs)} recommendations"
+                )
+
             # If no recommendations from hybrid strategies, use fallback
             if not all_recommendations:
                 logger.info("No hybrid recommendations found, using fallback...")
@@ -470,7 +478,108 @@ class HybridRecommendationEngine:
             logger.error(f"Error in artist network: {str(e)}")
         
         return recommendations[:limit]
-    
+
+    def _get_related_artist_recommendations(self, limit: int) -> List[Dict]:
+        """
+        Strategy 5: Related Artist Deep Cuts.
+
+        For each of the user's top artists, query Spotify's
+        `artist_related_artists` graph and pull low-popularity album cuts
+        from those related artists. This is the most natural deep-cut
+        source — it expands beyond the user's known artists into
+        adjacent-but-unfamiliar territory.
+
+        Notes:
+        - The track_discovery_engine has a workaround that uses
+          `artist_top_tracks` instead of `artist_related_artists`. The
+          ROADMAP explicitly calls for adding the live endpoint here, so
+          we use it directly. If the endpoint is soft-deprecated and
+          returns an empty list, we log it (Pitfall 5 in RESEARCH) and
+          return whatever candidates we collected.
+        - Popularity threshold < 40 mirrors the existing strategies'
+          deep-cut definition (see _get_artist_network_recommendations).
+        """
+        recommendations: List[Dict] = []
+        top_artists = self.profile.data.get('base_data', {}).get('top_artists', [])
+        if not top_artists:
+            logger.info("Strategy 5 (related artists): no top artists available, skipping")
+            return []
+
+        sp = self._get_spotify_client()
+        if not sp:
+            logger.info("Strategy 5 (related artists): no spotify client, skipping")
+            return []
+
+        for artist in top_artists[:4]:  # cap seed artists to keep API budget bounded
+            if not self._check_rate_limit() or len(recommendations) >= limit:
+                break
+            artist_id = artist.get('id')
+            if not artist_id:
+                continue
+            try:
+                related = sp.artist_related_artists(artist_id)
+                related_artists = related.get('artists', []) if related else []
+                logger.info(
+                    f"artist_related_artists: {len(related_artists)} related to "
+                    f"{artist.get('name', 'unknown')}"
+                )
+                for rel_artist in related_artists[:5]:
+                    if len(recommendations) >= limit or not self._check_rate_limit():
+                        break
+                    try:
+                        albums = sp.artist_albums(
+                            rel_artist['id'],
+                            album_type='album',
+                            limit=2,
+                            country='US',
+                        )
+                        for album in albums.get('items', []):
+                            if len(recommendations) >= limit:
+                                break
+                            album_tracks = sp.album_tracks(album['id'], limit=8)
+                            track_ids = [
+                                t['id'] for t in album_tracks.get('items', [])
+                                if t.get('id')
+                            ]
+                            if not track_ids:
+                                continue
+                            full_tracks = sp.tracks(track_ids)
+                            for track in full_tracks.get('tracks', []):
+                                if not track:
+                                    continue
+                                if track.get('popularity', 100) >= 40:
+                                    continue
+                                recommendations.append({
+                                    'id': track['id'],
+                                    'name': track['name'],
+                                    'artist': track['artists'][0]['name']
+                                    if track.get('artists') else rel_artist.get('name', ''),
+                                    'album': album.get('name', ''),
+                                    'preview_url': track.get('preview_url'),
+                                    'image_url': (
+                                        album['images'][0]['url']
+                                        if album.get('images') else None
+                                    ),
+                                    'source': 'related_artists',
+                                    'score': 0.0,
+                                    'popularity': track.get('popularity', 0),
+                                })
+                                if len(recommendations) >= limit:
+                                    break
+                    except Exception as inner_e:
+                        logger.warning(
+                            f"related_artists inner loop failed for "
+                            f"{rel_artist.get('name', 'unknown')}: {inner_e}"
+                        )
+                        continue
+            except Exception as e:
+                logger.warning(
+                    f"artist_related_artists failed for "
+                    f"{artist.get('name', 'unknown')}: {e}"
+                )
+                continue
+        return recommendations[:limit]
+
     def _get_contextual_recommendations(self, limit: int) -> List[Dict]:
         """Get contextual recommendations based on time using working endpoints"""
         recommendations = []
