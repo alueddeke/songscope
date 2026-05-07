@@ -36,7 +36,7 @@ Plans:
 
 ---
 
-## Phase 2: User Taste Vector & Real Scoring
+## Phase 2: User Taste Vector & Real Scoring (In Progress)
 **Goal:** Replace static source weights with a real scoring function. Build a genre-based user taste profile. Score candidates by cosine similarity + novelty factor.
 
 **Key deliverables:**
