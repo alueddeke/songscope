@@ -23,14 +23,22 @@ Recommend one song per day that the user genuinely discovers — not a song they
 - ✓ Rate limiting on API calls — existing
 - ✓ Recommendation metrics display strip — existing
 
+### Validated in Phase 1 (Fix & Foundation — 2026-05-07)
+
+- ✓ Filter already-known songs: DB-backed exclusion set using RecommendationLog + DailyGem history
+- ✓ Fix broken test suite: pytest.ini, conftest, settings path fixed; 31 tests collected, all pass
+- ✓ `Count` import fixed in personalization_engine; `update_weights` arity crash fixed
+- ✓ `RecommendationLog.liked` written on LIKE/DISLIKE/unlike — feedback signals non-zero
+- ✓ `DailyGem.was_liked` synced from submit_feedback view
+- ✓ Top-artist name filter corrected to track-level exclusion
+- ✓ `artist_related_artists` added as 5th candidate generation strategy
+
 ### Active
 
-- [ ] Filter already-known songs from all recommendations (liked songs, recently played, high play count)
 - [ ] ML-backed recommendation scoring — replace rule-based heuristics with a trained model
 - [ ] Wire AI feedback weights into actual recommendation ranking (currently stored but ignored)
 - [ ] Compound success metric tracking: user listened AND liked/saved recommended track
 - [ ] Per-recommendation outcome logging (was it played? saved? skipped?)
-- [ ] Fix broken test suite (stale import paths, missing `Count` import, wrong method arity)
 - [ ] Security hardening (rotate SECRET_KEY, move credentials to env vars, re-enable CSRF)
 - [ ] Explore viability of original hit-prediction dataset as base weights for ML model
 - [ ] Research and document current available Spotify endpoints and their data shape
@@ -50,11 +58,11 @@ Recommend one song per day that the user genuinely discovers — not a song they
 
 **Spotify API deprecations:** `sp.audio_features` and `sp.recommendations` endpoints are gone. The entire recommendation strategy had to pivot from audio-feature-similarity to playlist mining + artist discovery + time-of-day signals. This means the original dataset's features (BPM, energy, etc.) cannot be fetched for new songs via Spotify — but the dataset itself and trained weights may still be useful if another data source provides those features.
 
-**Current engine state:** `HybridRecommendationEngine` exists with multi-strategy scoring, but:
-1. Recommendations include songs the user already knows (critical UX failure)
+**Current engine state (post Phase 1):** `HybridRecommendationEngine` has a working exclusion pipeline and 5 candidate strategies. Known-song filtering is DB-backed. Feedback persistence is wired. Test suite is clean. Remaining work:
+1. ~~Recommendations include songs the user already knows~~ — Fixed (Phase 1)
 2. AI feedback weights are stored but never applied to scoring
-3. `RecommendationLog.liked` is never updated — success metrics are always 0
-4. The personalization engine has a broken method call that will crash on use
+3. ~~`RecommendationLog.liked` is never updated~~ — Fixed (Phase 1)
+4. ~~Personalization engine crash on use~~ — Fixed (Phase 1)
 
 **ML approach:** Content-based filtering is the right starting point for single-user. Build a user preference vector from their listening data, score candidate tracks against it, rank by score × novelty. Scikit-learn level — implementable, explainable in interviews, extensible to collaborative filtering later.
 
@@ -99,4 +107,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-06 after initialization*
+*Last updated: 2026-05-07 — Phase 1 complete*
