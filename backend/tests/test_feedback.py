@@ -2,10 +2,15 @@
 Unit tests for submit_feedback view RecommendationLog.liked write (Bug 3).
 Stubs created in Plan 01 — Plan 02 wires the actual view call.
 """
+import json
+from datetime import date, timedelta
+from unittest.mock import patch, MagicMock
+
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.utils import timezone
 
-from apps.core.models import RecommendationLog, Track
+from apps.core.models import RecommendationLog, Track, DailyGem, SpotifyToken
 
 
 class TestRecommendationLogLikedField(TestCase):
@@ -85,6 +90,15 @@ class TestDailyGemWasLikedSync(TestCase):
         self.gem = DailyGem.objects.create(
             user=self.user, date=date.today(), track=self.track,
         )
+        # SpotifyToken required by submit_feedback — expires_at is a DateTimeField
+        self.token = SpotifyToken.objects.create(
+            user=self.user,
+            access_token='fake_access_token',
+            refresh_token='fake_refresh_token',
+            expires_at=timezone.now() + timedelta(days=3650),
+        )
+        # Log the test user in via the Django test client
+        self.client.force_login(self.user)
 
     def test_was_liked_set_true_on_like(self):
         """DailyGem.was_liked must round-trip True (LIKE)."""
@@ -119,3 +133,70 @@ class TestDailyGemWasLikedSync(TestCase):
         ).first()
         self.assertIsNotNone(result)
         self.assertEqual(result.pk, self.gem.pk)
+
+    @patch('apps.core.views.HybridRecommendationEngine')
+    @patch('apps.recommendations.personalization_engine.PersonalizationEngine')
+    @patch('apps.core.views.get_spotipy_client')
+    def test_view_sets_was_liked_true_on_like(self, mock_sp_client, mock_pe, mock_hre):
+        """View path: POST LIKE → submit_feedback sets DailyGem.was_liked = True."""
+        mock_sp_client.return_value = MagicMock()
+        mock_pe.return_value = MagicMock()
+        mock_hre.return_value = MagicMock()
+
+        response = self.client.post(
+            '/api/submit-feedback/',
+            data=json.dumps({'track_id': self.track.spotify_id, 'feedback_type': 'LIKE'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.gem.refresh_from_db()
+        self.assertTrue(self.gem.was_liked)
+
+    @patch('apps.core.views.HybridRecommendationEngine')
+    @patch('apps.recommendations.personalization_engine.PersonalizationEngine')
+    @patch('apps.core.views.get_spotipy_client')
+    def test_view_sets_was_liked_false_on_dislike(self, mock_sp_client, mock_pe, mock_hre):
+        """View path: POST DISLIKE → submit_feedback sets DailyGem.was_liked = False."""
+        mock_sp_client.return_value = MagicMock()
+        mock_pe.return_value = MagicMock()
+        mock_hre.return_value = MagicMock()
+
+        response = self.client.post(
+            '/api/submit-feedback/',
+            data=json.dumps({'track_id': self.track.spotify_id, 'feedback_type': 'DISLIKE'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.gem.refresh_from_db()
+        self.assertFalse(self.gem.was_liked)
+        self.assertIsNotNone(self.gem.was_liked)
+
+    @patch('apps.core.views.HybridRecommendationEngine')
+    @patch('apps.recommendations.personalization_engine.PersonalizationEngine')
+    @patch('apps.core.views.get_spotipy_client')
+    def test_view_clears_was_liked_on_unlike(self, mock_sp_client, mock_pe, mock_hre):
+        """View path: POST LIKE twice → second call is unlike → DailyGem.was_liked = None."""
+        mock_sp_client.return_value = MagicMock()
+        mock_pe.return_value = MagicMock()
+        mock_hre.return_value = MagicMock()
+
+        # First LIKE — creates the UserFeedback row; sets was_liked = True
+        first = self.client.post(
+            '/api/submit-feedback/',
+            data=json.dumps({'track_id': self.track.spotify_id, 'feedback_type': 'LIKE'}),
+            content_type='application/json',
+        )
+        self.assertEqual(first.status_code, 200, first.content)
+
+        # Second LIKE — unlike branch: deletes feedback, clears was_liked = None
+        response = self.client.post(
+            '/api/submit-feedback/',
+            data=json.dumps({'track_id': self.track.spotify_id, 'feedback_type': 'LIKE'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.gem.refresh_from_db()
+        self.assertIsNone(self.gem.was_liked)
