@@ -594,12 +594,13 @@ def submit_feedback(request):
 
             return JsonResponse({'status': 'success', 'action': 'removed'})
         else:
-            # Create new feedback entry (without audio features)
-            feedback = UserFeedback.objects.create(
+            # Create or update feedback entry — update_or_create prevents
+            # IntegrityError from unique_together(user, track) when the same
+            # user submits different feedback types for the same track.
+            feedback, _ = UserFeedback.objects.update_or_create(
                 user=request.user,
                 track=track,
-                feedback_type=feedback_type,
-                track_features={}  # Empty since we can't get audio features
+                defaults={'feedback_type': feedback_type, 'track_features': {}}
             )
 
             # Update recommendations using the enhanced personalization engine
