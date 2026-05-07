@@ -38,7 +38,7 @@ class TestFeedbackInterpreter(unittest.TestCase):
         self.mock_openai = self.mock_openai_patcher.start()
         
         # Import after mocking
-        from songscope.ai_feedback_service import FeedbackInterpreter
+        from apps.ai.ai_feedback_service import FeedbackInterpreter
         self.FeedbackInterpreter = FeedbackInterpreter
     
     def tearDown(self):
@@ -48,7 +48,7 @@ class TestFeedbackInterpreter(unittest.TestCase):
     def test_initialization_with_api_key(self):
         """Test FeedbackInterpreter initialization with valid API key"""
         # Mock settings
-        with patch('songscope.ai_feedback_service.settings') as mock_settings:
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
             mock_settings.OPENAI_API_KEY = 'test-api-key'
             
             interpreter = self.FeedbackInterpreter()
@@ -59,7 +59,7 @@ class TestFeedbackInterpreter(unittest.TestCase):
     
     def test_initialization_without_api_key(self):
         """Test FeedbackInterpreter initialization without API key"""
-        with patch('songscope.ai_feedback_service.settings') as mock_settings:
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
             mock_settings.OPENAI_API_KEY = None
             
             interpreter = self.FeedbackInterpreter()
@@ -86,7 +86,7 @@ class TestFeedbackInterpreter(unittest.TestCase):
         self.mock_openai.return_value = mock_client
         
         # Mock settings
-        with patch('songscope.ai_feedback_service.settings') as mock_settings:
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
             mock_settings.OPENAI_API_KEY = 'test-api-key'
             
             interpreter = self.FeedbackInterpreter()
@@ -102,7 +102,7 @@ class TestFeedbackInterpreter(unittest.TestCase):
         # Mock OpenAI to raise an exception
         self.mock_openai.side_effect = Exception("API Error")
         
-        with patch('songscope.ai_feedback_service.settings') as mock_settings:
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
             mock_settings.OPENAI_API_KEY = 'test-api-key'
             
             interpreter = self.FeedbackInterpreter()
@@ -115,7 +115,7 @@ class TestFeedbackInterpreter(unittest.TestCase):
     
     def test_rate_limiting(self):
         """Test rate limiting functionality"""
-        with patch('songscope.ai_feedback_service.settings') as mock_settings:
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
             mock_settings.OPENAI_API_KEY = 'test-api-key'
             
             interpreter = self.FeedbackInterpreter()
@@ -131,7 +131,7 @@ class TestRateLimitMonitor(unittest.TestCase):
     """Test cases for RateLimitMonitor class"""
     
     def setUp(self):
-        from songscope.ai_feedback_service import RateLimitMonitor
+        from apps.ai.ai_feedback_service import RateLimitMonitor
         self.RateLimitMonitor = RateLimitMonitor
     
     def test_rate_limit_check(self):

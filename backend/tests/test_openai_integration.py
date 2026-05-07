@@ -123,7 +123,7 @@ Only include fields that are clearly indicated in the feedback. Be conservative 
             django.setup()
             
             # Test FeedbackInterpreter
-            from songscope.ai_feedback_service import FeedbackInterpreter
+            from apps.ai.ai_feedback_service import FeedbackInterpreter
             
             interpreter = FeedbackInterpreter()
             self.assertIsNotNone(interpreter)
