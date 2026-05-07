@@ -243,7 +243,8 @@ class HybridRecommendationEngine:
             self._update_saved_tracks(sp)  # Need this for fallback filtering
             self._update_playlists(sp)
             self._update_listening_patterns(sp)
-            
+            self._build_taste_vector()
+
             # Mark as updated
             self.profile.save()
             logger.info(f"Updated profile for user {self.user.id}")
@@ -714,36 +715,62 @@ class HybridRecommendationEngine:
         
         return unique_recommendations
     
+    def _build_taste_vector(self):
+        """Build genre frequency vector from top_artists. Stored as raw counts."""
+        top_artists = self.profile.data.get('base_data', {}).get('top_artists', [])
+        taste_vector = {}
+        for artist in top_artists:
+            for genre in artist.get('genres', []):
+                taste_vector[genre] = taste_vector.get(genre, 0) + 1
+        self.profile.data['taste_vector'] = taste_vector
+        logger.info(f"Built taste vector with {len(taste_vector)} genres from {len(top_artists)} artists")
+
+    def _cosine_similarity(self, vec_a: dict, vec_b: dict) -> float:
+        """Cosine similarity between two genre count dicts. Returns 0.0 if either empty."""
+        if not vec_a or not vec_b:
+            return 0.0
+        keys = set(vec_a.keys()) | set(vec_b.keys())
+        a = np.array([vec_a.get(k, 0.0) for k in keys])
+        b = np.array([vec_b.get(k, 0.0) for k in keys])
+        norm_a = np.linalg.norm(a)
+        norm_b = np.linalg.norm(b)
+        if norm_a == 0.0 or norm_b == 0.0:
+            return 0.0
+        return float(np.dot(a, b) / (norm_a * norm_b))
+
     def _score_recommendations(self, recommendations: List[Dict]) -> List[Dict]:
-        """Score recommendations based on user profile and preferences"""
-        weights = self.profile.get_recommendation_weights()
-        liked_artists = self.profile.data['preferences'].get('liked_artists', [])
-        disliked_artists = self.profile.data['preferences'].get('disliked_artists', [])
-        
+        """Score candidates: 0.4*genre_sim + 0.3*novelty + 0.3*feedback_multiplier (LOCKED formula)"""
+        taste_vector = self.profile.data.get('taste_vector', {})
+        liked_artists = self.profile.data.get('preferences', {}).get('liked_artists', [])
+        disliked_artists = self.profile.data.get('preferences', {}).get('disliked_artists', [])
+
+        # Build artist->genres lookup from already-fetched top_artists (zero extra API calls)
+        artist_genre_lookup = {
+            a['name']: a.get('genres', [])
+            for a in self.profile.data.get('base_data', {}).get('top_artists', [])
+        }
+
         for rec in recommendations:
-            score = 0.0
-            
-            # Base score from source
-            source_weight = weights.get(rec['source'], 0.1)
-            score += source_weight
-            
-            # Artist preference bonus
-            if rec['artist'] in liked_artists:
-                score += weights['feedback'] * 2  # Double the feedback weight
-            elif rec['artist'] in disliked_artists:
-                score -= weights['feedback'] * 3  # Heavy penalty for disliked artists
-            
-            # Contextual bonus
-            if rec['source'] == 'contextual':
-                score += weights['contextual'] * 0.5
-            
-            # Playlist mining bonus (hidden gems)
-            if rec['source'] == 'playlist_mining':
-                score += weights['playlist_mining'] * 0.3
-            
-            rec['score'] = max(0.0, score)  # Ensure non-negative score
-        
-        # Sort by score (highest first)
+            artist_name = rec.get('artist', '')
+
+            # genre_sim: cosine similarity between candidate genres and user taste vector
+            candidate_genres = {g: 1.0 for g in artist_genre_lookup.get(artist_name, [])}
+            genre_sim = self._cosine_similarity(candidate_genres, taste_vector)
+
+            # novelty: inverse of popularity (low popularity = high novelty)
+            novelty = 1.0 - (rec.get('popularity', 50) / 100.0)
+
+            # feedback_multiplier: artist-level preference signal
+            if artist_name in liked_artists:
+                feedback_multiplier = 1.5
+            elif artist_name in disliked_artists:
+                feedback_multiplier = 0.5
+            else:
+                feedback_multiplier = 1.0
+
+            # LOCKED formula — do not adjust weights
+            rec['score'] = 0.4 * genre_sim + 0.3 * novelty + 0.3 * feedback_multiplier
+
         recommendations.sort(key=lambda x: x['score'], reverse=True)
         return recommendations
     
@@ -886,52 +913,11 @@ class HybridRecommendationEngine:
             
             self.profile.data['preferences']['ai_feedback_history'] = ai_feedback_history
             
-            # Update recommendation weights based on AI feedback
-            self._update_weights_from_ai_feedback(interpretation)
-            
             self.profile.save()
             logger.info(f"Added AI feedback to profile: {interpretation}")
             
         except Exception as e:
             logger.error(f"Error adding AI feedback: {str(e)}")
-    
-    def _update_weights_from_ai_feedback(self, interpretation: Dict):
-        """Update recommendation weights based on AI feedback"""
-        try:
-            weights = self.profile.get_recommendation_weights()
-            
-            # Apply AI feedback to weights
-            if interpretation.get('tempo_preference') == 'faster':
-                weights['tempo_weight'] = min(weights.get('tempo_weight', 1.0) + 0.1, 2.0)
-            elif interpretation.get('tempo_preference') == 'slower':
-                weights['tempo_weight'] = max(weights.get('tempo_weight', 1.0) - 0.1, 0.1)
-            
-            if interpretation.get('energy_preference') == 'higher':
-                weights['energy_weight'] = min(weights.get('energy_weight', 1.0) + 0.1, 2.0)
-            elif interpretation.get('energy_preference') == 'lower':
-                weights['energy_weight'] = max(weights.get('energy_weight', 1.0) - 0.1, 0.1)
-            
-            if interpretation.get('mood_preference') == 'happier':
-                weights['valence_weight'] = min(weights.get('valence_weight', 1.0) + 0.1, 2.0)
-            elif interpretation.get('mood_preference') == 'sadder':
-                weights['valence_weight'] = max(weights.get('valence_weight', 1.0) - 0.1, 0.1)
-            
-            # Store specific artists/genres to avoid/prefer
-            if interpretation.get('specific_artists'):
-                if 'avoid_artists' not in weights:
-                    weights['avoid_artists'] = []
-                weights['avoid_artists'].extend(interpretation['specific_artists'])
-            
-            if interpretation.get('specific_genres'):
-                if 'prefer_genres' not in weights:
-                    weights['prefer_genres'] = []
-                weights['prefer_genres'].extend(interpretation['specific_genres'])
-            
-            self.profile.update_weights(weights)
-            logger.info(f"Updated weights from AI feedback: {weights}")
-            
-        except Exception as e:
-            logger.error(f"Error updating weights from AI feedback: {str(e)}")
     
     def get_profile_summary(self) -> Dict:
         """Get summary of user profile"""
