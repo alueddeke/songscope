@@ -250,7 +250,7 @@ class HybridRecommendationEngine:
             
         except Exception as e:
             logger.error(f"Error updating profile: {str(e)}")
-            self.profile.data['errors'].append({
+            self.profile.data.setdefault('errors', []).append({
                 'type': 'profile_update_failure',
                 'error': str(e),
                 'timestamp': timezone.now().isoformat()
@@ -361,7 +361,7 @@ class HybridRecommendationEngine:
     
     def _add_error(self, endpoint: str, error_type: str, error_message: str):
         """Add error to profile"""
-        self.profile.data['errors'].append({
+        self.profile.data.setdefault('errors', []).append({
             'type': error_type,
             'endpoint': endpoint,
             'error': error_message,
