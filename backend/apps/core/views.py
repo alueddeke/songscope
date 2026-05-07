@@ -29,14 +29,11 @@ from apps.recommendations.feature_extractor import extract_current_user_profile,
 from apps.recommendations.recommendation_engine import RecommendationEngine
 from apps.recommendations.hybrid_recommendation_engine import HybridRecommendationEngine
 from apps.ai.ai_feedback_service import FeedbackInterpreter, RateLimitExceeded, CostLimitExceeded
-from utils.logging_config import logger, log_api_error, log_spotify_error
+from utils.logging_config import logger
 
 class CsrfExemptSessionAuthentication(SessionAuthentication):
     def enforce_csrf(self, request):
         return  # To not enforce CSRF token
-
-
-logger = logging.getLogger(__name__)
 
 if settings.OAUTHLIB_INSECURE_TRANSPORT:
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
