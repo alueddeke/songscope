@@ -693,9 +693,9 @@ def submit_ai_feedback(request):
             ai_feedback = AIFeedback.objects.create(
                 user=request.user,
                 track=track,
-                original_text=feedback_text,
-                interpretation=interpretation,
-                confidence=interpretation.get('confidence', 0.0)
+                original_feedback=feedback_text,
+                ai_interpretation=interpretation,
+                confidence_score=interpretation.get('confidence', 0.0)
             )
             
             # Update hybrid recommendation engine with AI feedback
