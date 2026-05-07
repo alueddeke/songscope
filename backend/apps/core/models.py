@@ -201,6 +201,8 @@ class RecommendationLog(models.Model):
     recommended_at = models.DateTimeField(auto_now_add=True)
     feedback = models.CharField(max_length=255, blank=True)
     liked = models.BooleanField(null=True, blank=True)
+    track_popularity = models.IntegerField(default=0)
+    was_novel = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['-recommended_at']
