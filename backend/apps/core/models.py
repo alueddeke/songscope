@@ -232,6 +232,18 @@ class RecommendationLog(models.Model):
     liked = models.BooleanField(null=True, blank=True)
     track_popularity = models.IntegerField(default=0)
     was_novel = models.BooleanField(default=True)
+    source = models.CharField(
+        max_length=50,
+        choices=[
+            ('playlist_mining', 'Playlist Mining'),
+            ('artist_network', 'Artist Network'),
+            ('genre_search', 'Genre Search'),
+            ('related_artists', 'Related Artists'),
+            ('contextual', 'Contextual'),
+        ],
+        blank=True,
+        default='',
+    )
 
     class Meta:
         ordering = ['-recommended_at']
@@ -240,10 +252,10 @@ class RecommendationLog(models.Model):
         return f"Recommendation for {self.user.username}: {self.track.name}"
     
     @classmethod
-    def log_recommendation(cls, user, track):
+    def log_recommendation(cls, user, track, source=''):
         """Log a track recommendation"""
         try:
-            cls.objects.create(user=user, track=track)
+            cls.objects.create(user=user, track=track, source=source)
         except Exception as e:
             logger.error(f"Error logging recommendation: {str(e)}")
     

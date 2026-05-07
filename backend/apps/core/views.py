@@ -333,7 +333,7 @@ def get_track_recommendations(request):
                     'album': track.get('album', ''),
                 }
             )[0]
-            RecommendationLog.log_recommendation(request.user, track_obj)
+            RecommendationLog.log_recommendation(request.user, track_obj, source=track.get('source', ''))
 
         return JsonResponse({'recommendations': processed_tracks})
 
