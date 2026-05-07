@@ -22,7 +22,7 @@ import spotipy
 from spotipy.exceptions import SpotifyException
 from spotipy.oauth2 import SpotifyOAuth
 
-from .models import SpotifyToken, Track, UserFeedback, UserPreferences, RecommendationLog, AIFeedback
+from .models import SpotifyToken, Track, UserFeedback, UserPreferences, RecommendationLog, AIFeedback, DailyGem
 from .serializers import FeedbackSubmissionSerializer, AIFeedbackSubmissionSerializer
 from apps.spotify.utils import get_spotipy_client, refresh_spotify_token
 from apps.recommendations.feature_extractor import extract_current_user_profile, get_recommendations
@@ -591,6 +591,14 @@ def submit_feedback(request):
                 log.liked = None
                 log.save(update_fields=['liked'])
 
+            # Sync DailyGem.was_liked: clear it on unlike so today's gem reflects state.
+            gem = DailyGem.objects.filter(
+                user=request.user, date=timezone.localdate(), track=track
+            ).first()
+            if gem:
+                gem.was_liked = None
+                gem.save(update_fields=['was_liked'])
+
             return JsonResponse({'status': 'success', 'action': 'removed'})
         else:
             # Create or update feedback entry — update_or_create prevents
@@ -628,6 +636,15 @@ def submit_feedback(request):
             if log:
                 log.liked = (feedback_type == 'LIKE')
                 log.save(update_fields=['liked'])
+
+            # Sync DailyGem.was_liked so today's gem reflects LIKE/DISLIKE feedback.
+            if feedback_type in ('LIKE', 'DISLIKE'):
+                gem = DailyGem.objects.filter(
+                    user=request.user, date=timezone.localdate(), track=track
+                ).first()
+                if gem:
+                    gem.was_liked = (feedback_type == 'LIKE')
+                    gem.save(update_fields=['was_liked'])
 
             return JsonResponse({'status': 'success', 'action': 'added'})
 
