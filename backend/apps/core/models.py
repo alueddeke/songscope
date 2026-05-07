@@ -118,13 +118,41 @@ class UserProfile(models.Model):
         try:
             if 'feedback_history' in self.data:
                 self.data['feedback_history'] = [
-                    f for f in self.data['feedback_history'] 
+                    f for f in self.data['feedback_history']
                     if f.get('track_id') != track_id
                 ]
                 self.save(update_fields=['data'])
                 logger.info(f"Removed feedback for track {track_id}")
         except Exception as e:
             logger.error(f"Error removing feedback: {str(e)}")
+
+    def add_to_cache(self, recommendations):
+        """Add recommendations to cache (alias for update_cache)"""
+        self.update_cache(recommendations)
+
+    def cache_size(self):
+        """Return the number of cached recommendations"""
+        return len(self.data.get('cache', {}).get('recommendations', []))
+
+    def get_recommendation_weights(self):
+        """Return the current recommendation source weights"""
+        return self.data.get('recommendation_weights', {
+            'playlist_mining': 0.3,
+            'artist_network': 0.25,
+            'contextual': 0.2,
+            'popularity': 0.15,
+            'feedback': 0.1,
+        })
+
+    def update_weights(self, weights):
+        """Persist updated recommendation weights"""
+        self.data['recommendation_weights'] = weights
+        self.save(update_fields=['data'])
+
+    def needs_update(self):
+        """Return True if the profile data is more than 1 day old"""
+        from django.utils import timezone
+        return (timezone.now() - self.updated_at).days >= 1
 
 
 class Track(models.Model):
