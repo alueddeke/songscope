@@ -64,8 +64,11 @@ def spotify_login(request):
 @require_http_methods(["GET"])
 def spotify_callback(request):
     try:
-        spotify = OAuth2Session(client_id, redirect_uri=redirect_uri)
-        
+        state = request.session.get('oauth_state')
+        if not state:
+            return JsonResponse({'error': 'Missing OAuth state'}, status=400)
+        spotify = OAuth2Session(client_id, state=state, redirect_uri=redirect_uri)
+
         token = spotify.fetch_token(
             token_url,
             client_secret=client_secret,
