@@ -557,12 +557,42 @@ class HybridRecommendationEngine:
             spotify_token = SpotifyToken.objects.filter(user=self.user).first()
             if not spotify_token or spotify_token.is_expired():
                 return None
-            
+
             return get_spotipy_client(spotify_token.access_token)
         except Exception as e:
             logger.error(f"Error getting Spotify client: {str(e)}")
             return None
-    
+
+    def _get_persistent_exclusion_set(self) -> set:
+        """
+        Return a set of Spotify track IDs the user has already encountered.
+
+        DB-backed (no Spotify API calls), assembled from:
+          - RecommendationLog: every track ever recommended (excluding the
+            'error_log' sentinel created by RecommendationLog.log_error()).
+          - DailyGem: every track ever shown as the user's daily gem.
+
+        Returns a materialized Python `set` so membership checks in the
+        candidate filter loop are O(1) — wrapping the QuerySet in set()
+        avoids the N+1 SQL pattern that would arise from `track_id in qs`.
+        """
+        # Local import keeps the module's top-level imports lean and avoids
+        # any circular-import risk between recommendations and core apps.
+        from apps.core.models import RecommendationLog, DailyGem
+
+        logged_ids = set(
+            RecommendationLog.objects
+            .filter(user=self.user)
+            .exclude(track__spotify_id='error_log')
+            .values_list('track__spotify_id', flat=True)
+        )
+        gemmed_ids = set(
+            DailyGem.objects
+            .filter(user=self.user)
+            .values_list('track__spotify_id', flat=True)
+        )
+        return logged_ids | gemmed_ids
+
     def _remove_duplicates(self, recommendations: List[Dict]) -> List[Dict]:
         """Remove duplicate tracks based on track ID"""
         seen_ids = set()
@@ -626,125 +656,46 @@ class HybridRecommendationEngine:
         logger.warning("No recommendations available from any source")
         return []
     
-    # Removed complex hidden gems filter - replaced with simple _filter_out_liked_songs
-    
     def _filter_out_liked_songs(self, recommendations: List[Dict]) -> List[Dict]:
         """
-        Efficient filter to exclude songs the user has liked/saved.
-        Uses Spotify's check_users_saved_tracks endpoint to check each song individually.
+        Exclude tracks the user has already encountered, using the DB-backed
+        persistent exclusion set. No live Spotify API calls — eliminates rate
+        limit burn and the fallback-to-stale-cache path.
+
+        Bug 5 fix: removed the artist-name filter — that was filtering out
+        deep cuts by familiar artists, which is the OPPOSITE of what a
+        discovery engine wants. Track-level exclusion via the persistent set
+        is the correct precision.
+
+        Bug 6 fix: replaced batched saved-tracks API calls with a single
+        in-memory set lookup. The real-time saved-tracks check is preserved
+        as a last-gate inside `get_daily_gem` in views.py (line ~1050) —
+        that is the right place for it.
         """
-        filtered_recommendations = []
-        
-        # Get user's top artists (they know these well)
-        top_artist_names = {
-            artist['name'] for artist in self.profile.data.get('base_data', {}).get('top_artists', [])
-        }
-        
-        logger.info(f"Filtering {len(recommendations)} recommendations against {len(top_artist_names)} top artists")
-        logger.info(f"Sample top artists: {list(top_artist_names)[:5] if top_artist_names else 'None'}")
-        
-        # Get Spotify client
-        sp = self._get_spotify_client()
-        if not sp:
-            logger.error("No Spotify client available for filtering")
-            return recommendations
-        
-        # Check which tracks the user has saved (liked)
-        track_ids_to_check = [rec['id'] for rec in recommendations]
-        
-        try:
-            if not self._check_rate_limit():
-                logger.warning("Rate limit approaching, skipping liked songs check")
-                return recommendations
-            
-            # Spotify API has a limit on how many IDs you can check at once
-            # Process in batches of 20 (Spotify's limit is usually 50, but we'll be safe)
-            batch_size = 20
-            all_saved_status = []
-            
-            for i in range(0, len(track_ids_to_check), batch_size):
-                batch_ids = track_ids_to_check[i:i + batch_size]
-                logger.info(f"Checking batch {i//batch_size + 1}: {len(batch_ids)} tracks")
-                
-                try:
-                    batch_saved_status = sp.current_user_saved_tracks_contains(batch_ids)
-                    all_saved_status.extend(batch_saved_status)
-                    logger.info(f"Batch {i//batch_size + 1} results: {batch_saved_status}")
-                except Exception as e:
-                    logger.error(f"Error checking batch {i//batch_size + 1}: {str(e)}")
-                    # If batch fails, assume none are saved for this batch
-                    all_saved_status.extend([False] * len(batch_ids))
-            
-            saved_status = all_saved_status
-            logger.info(f"Checked {len(track_ids_to_check)} tracks against user's liked songs")
-            logger.info(f"Saved status sample: {saved_status[:5] if saved_status else 'None'}")
-            
-        except Exception as e:
-            logger.error(f"Error checking saved tracks: {str(e)}")
-            # Fallback: use cached saved tracks from profile
-            logger.info("Using fallback: checking against cached saved tracks")
-            cached_saved_track_ids = {
-                track['id'] for track in self.profile.data.get('base_data', {}).get('saved_tracks', [])
-            }
-            
-            filtered_recommendations = []
-            filtered_out_count = 0
-            
-            for rec in recommendations:
-                should_filter = False
-                filter_reason = ""
-                
-                # Check if user has liked this track on Spotify (cached)
-                if rec['id'] in cached_saved_track_ids:
-                    should_filter = True
-                    filter_reason = f"Spotify liked song (cached): {rec['name']} by {rec['artist']}"
-                    logger.info(f"🚫 FILTERED OUT LIKED SONG (CACHED): {rec['id']} - {rec['name']} by {rec['artist']}")
-                
-                # Skip if from user's top artists (they know these artists well)
-                elif rec['artist'] in top_artist_names:
-                    should_filter = True
-                    filter_reason = f"Top artist: {rec['name']} by {rec['artist']}"
-                    logger.info(f"🚫 FILTERED OUT TOP ARTIST: {rec['name']} by {rec['artist']}")
-                
-                if should_filter:
-                    filtered_out_count += 1
-                    continue
-                
-                # Keep the track
-                logger.info(f"✅ KEEPING TRACK: {rec['name']} by {rec['artist']} (not liked, not top artist)")
-                filtered_recommendations.append(rec)
-            
-            logger.info(f"Fallback filtered {len(recommendations)} -> {len(filtered_recommendations)} tracks (filtered out {filtered_out_count})")
-            return filtered_recommendations
-        
-        filtered_out_count = 0
-        
-        for i, rec in enumerate(recommendations):
-            should_filter = False
-            filter_reason = ""
-            
-            # Check if user has liked this track on Spotify
-            if i < len(saved_status) and saved_status[i]:
-                should_filter = True
-                filter_reason = f"Spotify liked song: {rec['name']} by {rec['artist']}"
-                logger.info(f"🚫 FILTERED OUT LIKED SONG: {rec['id']} - {rec['name']} by {rec['artist']}")
-            
-            # Skip if from user's top artists (they know these artists well)
-            elif rec['artist'] in top_artist_names:
-                should_filter = True
-                filter_reason = f"Top artist: {rec['name']} by {rec['artist']}"
-                logger.info(f"🚫 FILTERED OUT TOP ARTIST: {rec['name']} by {rec['artist']}")
-            
-            if should_filter:
-                filtered_out_count += 1
+        exclusion_ids = self._get_persistent_exclusion_set()
+        logger.info(
+            f"DB exclusion set has {len(exclusion_ids)} track IDs "
+            f"(combined RecommendationLog + DailyGem history)"
+        )
+
+        filtered = []
+        filtered_out = 0
+        for rec in recommendations:
+            rec_id = rec.get('id')
+            if rec_id and rec_id in exclusion_ids:
+                filtered_out += 1
+                logger.debug(
+                    f"FILTERED (DB exclusion): {rec.get('name')} by "
+                    f"{rec.get('artist')} [{rec_id}]"
+                )
                 continue
-            
-            # Keep the track
-            logger.info(f"✅ KEEPING TRACK: {rec['name']} by {rec['artist']} (not liked, not top artist)")
-            filtered_recommendations.append(rec)
-        
-        logger.info(f"Filtered {len(recommendations)} -> {len(filtered_recommendations)} tracks (filtered out {filtered_out_count})")
-        return filtered_recommendations
+            filtered.append(rec)
+
+        logger.info(
+            f"_filter_out_liked_songs: {len(recommendations)} candidates -> "
+            f"{len(filtered)} after exclusion (removed {filtered_out})"
+        )
+        return filtered
     
     def _filter_out_recently_played(self, recommendations: List[Dict]) -> List[Dict]:
         """Filter out tracks the user has played recently"""
