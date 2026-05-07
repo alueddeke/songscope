@@ -603,7 +603,16 @@ def submit_feedback(request):
             # Also update hybrid profile
             hybrid_engine = HybridRecommendationEngine(request.user)
             hybrid_engine.remove_feedback(track.spotify_id)
-            
+
+            # Bug 3 fix (Phase 1): clear RecommendationLog.liked on unlike so metrics
+            # queries (logs.filter(liked=True).count()) reflect the unrated state.
+            log = RecommendationLog.objects.filter(
+                user=request.user, track=track
+            ).order_by('-recommended_at').first()
+            if log:
+                log.liked = None
+                log.save(update_fields=['liked'])
+
             return JsonResponse({'status': 'success', 'action': 'removed'})
         else:
             # Create new feedback entry (without audio features)
@@ -629,6 +638,17 @@ def submit_feedback(request):
             hybrid_engine.add_feedback(track.spotify_id, feedback.feedback_type, track_info)
             
             logger.info(f"Feedback processed: {feedback.feedback_type} for track {track.name}")
+
+            # Bug 3 fix (Phase 1): write RecommendationLog.liked so success metrics
+            # (logs.filter(liked=True).count()) become non-zero. Maps:
+            #   feedback_type == 'LIKE'    -> liked = True
+            #   feedback_type == 'DISLIKE' -> liked = False
+            log = RecommendationLog.objects.filter(
+                user=request.user, track=track
+            ).order_by('-recommended_at').first()
+            if log:
+                log.liked = (feedback_type == 'LIKE')
+                log.save(update_fields=['liked'])
 
             return JsonResponse({'status': 'success', 'action': 'added'})
 
