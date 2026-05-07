@@ -1,1 +1,1 @@
-# Tests package for SongScope backend
+# Test package for SongScope backend
