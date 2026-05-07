@@ -97,11 +97,7 @@ def spotify_callback(request):
     except Exception as e:
         logger.error(f"Error in spotify_callback: {str(e)}", exc_info=True)
         return JsonResponse({'error': f"Failed to process callback: {str(e)}"}, status=400)
-    
-    except Exception as e:
-        logger.error(f"Error in spotify_callback: {str(e)}", exc_info=True)
-        return JsonResponse({'error': f"Failed to process callback: {str(e)}"}, status=400)
-  
+
 @login_required
 def get_user_top_tracks(request):
     """Get user's top tracks using Spotipy"""
