@@ -36,6 +36,8 @@ status: issues_found
 
 Reviewed the core models, views, two recommendation engines, pytest configuration, and all 5 test files submitted for Phase 1. The implementation contains several BLOCKERs that will cause runtime crashes or incorrect behavior in production: three missing methods on `UserProfile` are called by the hybrid engine, the `AIFeedback` model is created with wrong field names (two mismatches), and `PersonalizationEngine` is imported from a path that does not exist (`from .personalization_engine` inside the `core` package, but the file lives in `recommendations`). All test files for the AI feedback service import from a `songscope` package that does not exist on disk, so those tests will always fail with `ModuleNotFoundError`. The `submit_feedback` view contains a double-delete bug in the unlike path. Additionally the OAuth callback silently skips CSRF state validation, which is a security gap.
 
+**Update (quick pass — `test_feedback.py` view-level tests):** WR-09 is resolved. The `DailyGem.was_liked` sync is now implemented in `submit_feedback` (views.py:594-600, 640-647) and three view-level tests (`test_view_sets_was_liked_true_on_like`, `test_view_sets_was_liked_false_on_dislike`, `test_view_clears_was_liked_on_unlike`) were added to `TestDailyGemWasLikedSync`. One new WARNING was identified in these new tests (WR-10): the DISLIKE test contains a false-positive risk due to `assertFalse(None)` passing silently.
+
 ---
 
 ## Critical Issues
@@ -329,13 +331,45 @@ feedback, _ = UserFeedback.objects.update_or_create(
 
 ---
 
-### WR-09: `TestDailyGemWasLikedSync` tests only exercise ORM round-trips, not the actual view code path
+### WR-09: ~~`TestDailyGemWasLikedSync` tests only exercise ORM round-trips~~ — RESOLVED
 
-**File:** `backend/tests/test_feedback.py:64-121`
+**File:** `backend/tests/test_feedback.py`
 
-**Issue:** The class docstring claims to verify "the existing views.py:submit_feedback DailyGem block (lines ~636-643)". However, no such block exists in `views.py` — a search of the entire file finds zero references to `DailyGem`, `was_liked`, or `was_skipped`. The tests only exercise direct ORM `save()` + `refresh_from_db()` round-trips. The actual requirement — that `submit_feedback` syncs `DailyGem.was_liked` — is completely untested and the feature code does not exist.
+**Status:** Resolved. Three view-level tests (`test_view_sets_was_liked_true_on_like`, `test_view_sets_was_liked_false_on_dislike`, `test_view_clears_was_liked_on_unlike`) were added to `TestDailyGemWasLikedSync`. The corresponding `DailyGem.was_liked` sync blocks were implemented in `submit_feedback` (views.py:594-600 for unlike, 640-647 for LIKE/DISLIKE). Patch targets (`apps.core.views.HybridRecommendationEngine`, `apps.recommendations.personalization_engine.PersonalizationEngine`, `apps.core.views.get_spotipy_client`) are all correct. The `SpotifyToken.expires_at` fixture uses `timezone.now() + timedelta(days=3650)` — timezone-aware, correct for `DateTimeField`.
 
-**Fix:** Implement the `DailyGem.was_liked` sync in `submit_feedback` and add a test that calls the view through `self.client.post(...)` to verify the end-to-end behavior.
+See WR-10 for a newly identified defect in one of the new tests.
+
+---
+
+### WR-10: `test_view_sets_was_liked_false_on_dislike` will pass even if the view never writes `DailyGem.was_liked` — false positive
+
+**File:** `backend/tests/test_feedback.py:173-174`
+
+**Issue:** `DailyGem.was_liked` is `None` by default (the field is nullable, and setUp creates the gem without setting it). The test posts DISLIKE and then asserts:
+
+```python
+self.assertFalse(self.gem.was_liked)    # line 173
+self.assertIsNotNone(self.gem.was_liked)  # line 174
+```
+
+`assertFalse` is evaluated before `assertIsNotNone`. If the view's DailyGem sync block is not reached for any reason (e.g., the gem filter returns no results, the `if gem:` guard fails, or the feature is later removed), `was_liked` remains `None`. `self.assertFalse(None)` **passes** — Python's `bool(None)` is `False`. The `assertIsNotNone` on the next line would then catch it, but only if the test runner reaches that line after `assertFalse` already passes. This ordering means the more specific guard (`assertIsNotNone`) comes second and a silent miss is possible if future refactoring reorders assertions.
+
+More critically: because `assertFalse(None)` passes, a complete regression (view stops writing `was_liked` entirely) would not be caught by this test. The test gives false confidence.
+
+**Fix:** Assert the field value precisely, and put the `assertIsNotNone` check first, or use `assertEqual`:
+
+```python
+self.gem.refresh_from_db()
+self.assertIsNotNone(self.gem.was_liked)   # must come first
+self.assertIs(self.gem.was_liked, False)   # assertIs distinguishes False from None
+```
+
+Or more concisely:
+```python
+self.assertEqual(self.gem.was_liked, False)
+```
+
+`assertEqual(None, False)` fails, whereas `assertFalse(None)` passes — use `assertEqual` or `assertIs` for nullable boolean fields to avoid this trap.
 
 ---
 
@@ -394,4 +428,4 @@ with self.assertRaises(RateLimitExceeded):
 
 _Reviewed: 2026-05-07_
 _Reviewer: Claude (gsd-code-reviewer)_
-_Depth: standard_
+_Depth: standard + quick addendum (view-level DailyGem tests)_

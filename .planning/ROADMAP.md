@@ -10,7 +10,7 @@ _Created: 2026-05-07_
 
 ---
 
-## Phase 1: Fix & Foundation
+## Phase 1: Fix & Foundation ✓ Complete (2026-05-07)
 **Goal:** Eliminate all bugs that corrupt data or produce wrong results. Establish reliable candidate exclusion. Add the missing candidate source. Nothing here is ML yet — just making the pipeline trustworthy.
 
 **Key deliverables:**
@@ -26,12 +26,13 @@ _Created: 2026-05-07_
 
 **Concepts introduced:** Exclusion sets, candidate generation pipeline, implicit feedback capture
 
-**Plans:** 3 plans
+**Plans:** 4 plans
 
 Plans:
 - [x] 01-01-PLAN.md — Test infrastructure (pytest.ini, conftest, fix broken settings path, stub test files)
 - [x] 01-02-PLAN.md — personalization_engine fixes (Count import, update_weights arity) + submit_feedback writes RecommendationLog.liked
 - [x] 01-03-PLAN.md — hybrid_recommendation_engine: DB exclusion set, remove top-artist filter, add artist_related_artists 5th strategy
+- [x] 01-04-PLAN.md — View-level integration tests for DailyGem.was_liked sync (gap closure)
 
 ---
 

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Session resumed — no phases exist yet; ready to create roadmap or plan first phase
-last_updated: "2026-05-07T20:39:05.183Z"
+stopped_at: Phase 1 complete — 4/4 plans, 7/7 truths verified
+last_updated: "2026-05-07T21:30:00.000Z"
 progress:
   total_phases: 4
-  completed_phases: 0
-  total_plans: 3
-  completed_plans: 0
-  percent: 0
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 4
+  percent: 25
 ---
 
 # STATE.md — SongScope
@@ -24,16 +24,15 @@ _Reconstructed: 2026-05-07 (no prior STATE.md found)_
 
 ## Current Position
 
-Phase: 01 (fix-foundation) — EXECUTING
-Plan: 1 of 3
+Phase: 02 (ml-scoring) — PENDING
 
-- **Phase:** Phase 1 of 4 — Fix & Foundation (not yet planned)
-- **Plan:** None
-- **Status:** Executing Phase 01
+- **Phase:** Phase 2 of 4 — User Taste Vector & Real Scoring
+- **Plan:** None (not yet planned)
+- **Status:** Phase 01 complete ✓ — ready to plan Phase 02
 
 ## Progress
 
-`[░░░░░░░░░░] 0%` — Roadmap created, execution not started
+`[██░░░░░░░░] 25%` — Phase 1 complete (4/4 plans, verification passed)
 
 ## Recent Decisions
 
@@ -58,10 +57,17 @@ Plan: 1 of 3
 
 ## Blockers / Concerns
 
-- **Security:** Hardcoded SECRET_KEY committed to git, Spotify client secret in browser bundle, CSRF disabled
-- **Crashes:** Missing `Count` import in personalization, wrong `update_weights` arity
-- **Incomplete:** AI feedback stored but never applied; `RecommendationLog.liked` never updated
-- **Tests:** Broken (stale import paths)
+- **Security:** Hardcoded SECRET_KEY committed to git, Spotify client secret in browser bundle, CSRF disabled (deferred to post-ML milestone)
+
+## Phase 1 Resolved
+
+- ✓ `Count` import fix + `update_weights` arity crash fixed
+- ✓ `RecommendationLog.liked` written on LIKE/DISLIKE/unlike
+- ✓ `DailyGem.was_liked` synced from submit_feedback view
+- ✓ DB-backed exclusion set (RecommendationLog + DailyGem history)
+- ✓ Top-artist name filter replaced by track-level exclusion
+- ✓ `artist_related_artists` added as 5th candidate strategy
+- ✓ Test suite fixed (31 phase-relevant tests collected, all pass)
 
 ## Session Continuity
 
