@@ -92,33 +92,34 @@ class UserProfile(models.Model):
     def add_feedback(self, track_id, feedback_type, track_info=None):
         """Add feedback to the user's profile data"""
         try:
-            if 'feedback_history' not in self.data:
-                self.data['feedback_history'] = []
-            
+            preferences = self.data.setdefault('preferences', {})
+            history = preferences.setdefault('feedback_history', [])
+
             feedback_entry = {
                 'track_id': track_id,
                 'feedback_type': feedback_type,
                 'timestamp': timezone.now().isoformat(),
                 'track_info': track_info or {}
             }
-            
-            self.data['feedback_history'].append(feedback_entry)
-            
+
+            history.append(feedback_entry)
+
             # Keep only last 100 feedback entries to prevent data bloat
-            if len(self.data['feedback_history']) > 100:
-                self.data['feedback_history'] = self.data['feedback_history'][-100:]
-            
+            if len(history) > 100:
+                preferences['feedback_history'] = history[-100:]
+
             self.save(update_fields=['data'])
             logger.info(f"Added feedback to profile: {feedback_type} for track {track_id}")
         except Exception as e:
             logger.error(f"Error adding feedback to profile: {str(e)}")
-    
+
     def remove_feedback(self, track_id):
         """Remove feedback for a specific track"""
         try:
-            if 'feedback_history' in self.data:
-                self.data['feedback_history'] = [
-                    f for f in self.data['feedback_history']
+            preferences = self.data.get('preferences', {})
+            if 'feedback_history' in preferences:
+                preferences['feedback_history'] = [
+                    f for f in preferences['feedback_history']
                     if f.get('track_id') != track_id
                 ]
                 self.save(update_fields=['data'])
