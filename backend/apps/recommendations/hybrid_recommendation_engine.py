@@ -397,7 +397,9 @@ class HybridRecommendationEngine:
                     playlist_tracks = sp.playlist_tracks(playlist['id'], limit=20)
                     
                     for item in playlist_tracks['items']:
-                        track = item['track']
+                        track = item.get('track')
+                        if not track or not track.get('id'):  # guard against null/local tracks
+                            continue
                         if track['id'] not in saved_track_ids:  # Don't recommend already saved tracks
                             recommendations.append({
                                 'id': track['id'],
