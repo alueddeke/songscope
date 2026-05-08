@@ -776,6 +776,8 @@ def get_user_name(request):
         return JsonResponse({'error': str(e)}, status=500)
     
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def add_track_to_liked(request):
     """Get user's name using Spotipy"""
     try:
