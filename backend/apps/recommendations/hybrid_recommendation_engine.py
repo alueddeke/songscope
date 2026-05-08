@@ -293,8 +293,12 @@ class HybridRecommendationEngine:
             if not self._check_rate_limit():
                 return
             
-            # Get ALL saved tracks (Spotify liked songs) - increase limit significantly
-            saved_tracks = sp.current_user_saved_tracks(limit=1000)
+            # Get ALL saved tracks via pagination (Spotify API max is 50 per request)
+            results = sp.current_user_saved_tracks(limit=50)
+            all_items = list(results['items'])
+            while results['next']:
+                results = sp.next(results)
+                all_items.extend(results['items'])
             saved_tracks_list = [
                 {
                     'id': item['track']['id'],
@@ -303,7 +307,7 @@ class HybridRecommendationEngine:
                     'artist_id': item['track']['artists'][0]['id'],
                     'added_at': item['added_at']
                 }
-                for item in saved_tracks['items']
+                for item in all_items
             ]
             
             self.profile.data['base_data']['saved_tracks'] = saved_tracks_list
