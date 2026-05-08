@@ -12,12 +12,12 @@ files_reviewed_list:
 findings:
   critical: 3
   warning: 5
-  info: 3
-  total: 11
+  info: 0
+  total: 8
 status: fixes_applied
-fixes_applied: 8
+fixes_applied: 11
 fixes_skipped: 0
-fixed_at: 2026-05-07T00:00:00Z
+fixed_at: 2026-05-08T00:00:00Z
 ---
 
 # Phase 02: Code Review Report
