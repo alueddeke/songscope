@@ -879,9 +879,10 @@ class HybridRecommendationEngine:
             
             # Update liked artists if this was a like feedback
             liked_artists = self.profile.data.get('preferences', {}).get('liked_artists', [])
-            if track_info := next((fb for fb in feedback_history if fb.get('track_id') == track_id), None):
-                artist_name = track_info.get('artist')
-                if artist_name in liked_artists:
+            if entry := next((fb for fb in feedback_history if fb.get('track_id') == track_id), None):
+                # artist is nested under 'track_info', not at the top level
+                artist_name = entry.get('track_info', {}).get('artist')
+                if artist_name and artist_name in liked_artists:
                     liked_artists.remove(artist_name)
                     self.profile.data['preferences']['liked_artists'] = liked_artists
             
