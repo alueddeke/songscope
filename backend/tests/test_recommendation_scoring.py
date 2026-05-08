@@ -183,8 +183,8 @@ class TestScoreFormula(unittest.TestCase):
             ],
         )
         recs = [
-            _make_rec(artist='Low Score Band', popularity=99),   # low genre_sim, low novelty
-            _make_rec(artist='High Score Band', popularity=0),   # high genre_sim, high novelty
+            {**_make_rec(artist='Low Score Band', popularity=99), 'id': 'track_low'},   # low genre_sim, low novelty
+            {**_make_rec(artist='High Score Band', popularity=0),  'id': 'track_high'}, # high genre_sim, high novelty
         ]
         result = engine._score_recommendations(recs)
         self.assertGreater(result[0]['score'], result[1]['score'])
