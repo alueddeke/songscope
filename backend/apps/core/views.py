@@ -678,13 +678,20 @@ def submit_ai_feedback(request):
             except Track.DoesNotExist:
                 logger.warning(f"Track {track_id} not found for AI feedback")
         
+        # Guard: track is required (AIFeedback.track is non-nullable)
+        if track is None:
+            return JsonResponse(
+                {'error': 'Track not found; cannot store AI feedback without a valid track.'},
+                status=400
+            )
+
         # Initialize AI feedback interpreter
         interpreter = FeedbackInterpreter()
-        
+
         try:
             # Interpret the feedback
             interpretation = interpreter.interpret_feedback(feedback_text, track_info)
-            
+
             # Store the AI feedback
             ai_feedback = AIFeedback.objects.create(
                 user=request.user,
