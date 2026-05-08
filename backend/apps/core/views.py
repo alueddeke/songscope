@@ -394,45 +394,6 @@ def update_user_profile(request):
         return JsonResponse({'error': 'Failed to update profile'}, status=500)
 
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_simple_recommendations(request):
-    """Simple recommendations endpoint for testing feedback"""
-    try:
-        # Return some popular tracks for testing feedback
-        test_tracks = [
-            {
-                'id': '4iV5W9uYEdYUVa79Axb7Rh',
-                'name': 'Blinding Lights',
-                'artist': 'The Weeknd',
-                'album': 'After Hours',
-                'preview_url': 'https://p.scdn.co/mp3-preview/...',
-                'image_url': 'https://i.scdn.co/image/...'
-            },
-            {
-                'id': '0V3wPSX9ygBnCm8psKOegu',
-                'name': 'As It Was',
-                'artist': 'Harry Styles',
-                'album': 'Harry\'s House',
-                'preview_url': 'https://p.scdn.co/mp3-preview/...',
-                'image_url': 'https://i.scdn.co/image/...'
-            },
-            {
-                'id': '1Qrg8KdBHuXFu6GMcSFYyq',
-                'name': 'Flowers',
-                'artist': 'Miley Cyrus',
-                'album': 'Endless Summer Vacation',
-                'preview_url': 'https://p.scdn.co/mp3-preview/...',
-                'image_url': 'https://i.scdn.co/image/...'
-            }
-        ]
-        
-        return JsonResponse({'recommendations': test_tracks})
-        
-    except Exception as e:
-        logger.error(f"Error in get_simple_recommendations: {str(e)}")
-        return JsonResponse({'error': f'Failed: {str(e)}'}, status=500)
-
 def get_spotify_api_client(access_token):
     """
     Create a Spotify API client using the access token

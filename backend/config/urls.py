@@ -39,7 +39,6 @@ urlpatterns = [
     path('api/personalization-summary/', views.get_personalization_summary, name='personalization_summary'),
     path('api/user-profile-summary/', views.get_user_profile_summary, name='user_profile_summary'),
     path('api/update-user-profile/', views.update_user_profile, name='update_user_profile'),
-    path('api/simple-recommendations/', views.get_simple_recommendations, name='simple_recommendations'),
     path('api/user-top-tracks/', views.get_user_top_tracks, name='user_top_tracks'),
     path('api/user-recently-played/', views.get_user_recently_played, name='user_recently_played'),
     path('api/user-top-artists/', views.get_user_top_artists, name='user_top_artists'),
