@@ -237,7 +237,13 @@ class HybridRecommendationEngine:
                 return
             
             sp = get_spotipy_client(spotify_token.access_token)
-            
+
+            # Ensure required keys exist for both new and legacy profiles
+            self.profile.data.setdefault('base_data', {})
+            self.profile.data.setdefault('preferences', {
+                'liked_artists': [], 'disliked_artists': [], 'feedback_history': []
+            })
+
             # Update base data with error handling
             self._update_top_artists(sp)
             self._update_saved_tracks(sp)  # Need this for fallback filtering
