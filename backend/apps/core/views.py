@@ -530,12 +530,15 @@ def submit_feedback(request):
             return JsonResponse({'error': serializer.errors}, status=400)
 
         # Get or refresh Spotify token
-        spotify_token = SpotifyToken.objects.get(user=request.user)
+        try:
+            spotify_token = SpotifyToken.objects.get(user=request.user)
+        except SpotifyToken.DoesNotExist:
+            return JsonResponse({'error': 'Spotify token not found'}, status=404)
         if spotify_token.is_expired():
             spotify_token = refresh_spotify_token(spotify_token)
 
         sp = get_spotipy_client(spotify_token.access_token)
-        
+
         # Get or create track
         track_id = serializer.validated_data['track_id']
         feedback_type = serializer.validated_data['feedback_type']
