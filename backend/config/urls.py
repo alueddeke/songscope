@@ -44,6 +44,7 @@ urlpatterns = [
     path('api/user-top-artists/', views.get_user_top_artists, name='user_top_artists'),
     path('api/artist-details/<str:artist_id>/', views.get_artist_details, name='artist_details'),
     path('api/recommendations/', views.get_track_recommendations, name='recommendations'),
+    path('api/daily-gem/', views.get_daily_gem, name='get_daily_gem'),
     path('api/submit-feedback/', views.submit_feedback, name='submit_feedback'), 
     path('api/submit-ai-feedback/', views.submit_ai_feedback, name='submit_ai_feedback'),
     path('api/check-track-feedback/<str:track_id>/', views.check_track_feedback, name='check_track_feedback'),
