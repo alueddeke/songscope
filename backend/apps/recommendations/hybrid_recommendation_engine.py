@@ -27,6 +27,23 @@ from .track_discovery_engine import TrackDiscoveryEngine
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Thompson Sampling constants (Phase 3)
+# ---------------------------------------------------------------------------
+# Static default weights for cold-start sources (sum = 1.0)
+SOURCE_DEFAULTS = {
+    'playlist_mining': 0.3,
+    'artist_network': 0.25,
+    'genre_search': 0.2,
+    'related_artists': 0.15,
+    'contextual': 0.1,
+}
+
+# Minimum number of observations (successes + failures) before a source
+# transitions from cold-start (static default) to Beta sampling.
+COLD_START_THRESHOLD = 3
+
+
 class HybridRecommendationEngine:
     """
     Hybrid recommendation engine that combines multiple strategies.
@@ -68,6 +85,61 @@ class HybridRecommendationEngine:
         
         return profile
     
+    def get_recommendation_weights(self) -> dict:
+        """
+        Thompson Sampling bandit for source weight selection.
+
+        For each of the 5 candidate sources, draw a weight from Beta(s+1, f+1)
+        where s = successes (liked tracks from this source) and f = failures
+        (disliked/skipped tracks from this source), stored in
+        UserProfile.data['source_stats'].
+
+        Cold-start rule: if a source has fewer than COLD_START_THRESHOLD total
+        observations (s+f < 3), use the static SOURCE_DEFAULTS weight for that
+        source instead of sampling.
+
+        If source_stats is completely empty, return static defaults unchanged.
+
+        Returns a dict with all 5 source keys (normalized to sum to 1.0) plus
+        a 'bandit_active' sentinel key set to True to signal Phase 3 is wired.
+        """
+        source_stats = self.profile.data.get('source_stats', {})
+
+        # Pure cold-start: no stats at all — return neutral 1.0 weights + sentinel.
+        # Using 1.0 (not the static defaults) keeps the source multiplier neutral
+        # when no source_stats have been recorded yet, so the base score formula
+        # is unaffected during cold-start.
+        if not source_stats:
+            result = {source: 1.0 for source in SOURCE_DEFAULTS}
+            result['bandit_active'] = True
+            return result
+
+        # Sample or use default for each source
+        thetas = {}
+        for source, default_weight in SOURCE_DEFAULTS.items():
+            stats = source_stats.get(source, {'s': 0, 'f': 0})
+            n = stats.get('s', 0) + stats.get('f', 0)
+            if n < COLD_START_THRESHOLD:
+                # Cold-start for this source: use static default
+                thetas[source] = default_weight
+            else:
+                # Enough observations: sample from Beta(s+1, f+1)
+                thetas[source] = random.betavariate(
+                    stats.get('s', 0) + 1,
+                    stats.get('f', 0) + 1,
+                )
+
+        # Normalize so weights sum to 1.0
+        total = sum(thetas.values())
+        if total == 0.0:
+            result = {source: 1.0 for source in SOURCE_DEFAULTS}
+            result['bandit_active'] = True
+            return result
+
+        result = {k: v / total for k, v in thetas.items()}
+        result['bandit_active'] = True
+        return result
+
     def get_recommendations(self, limit=20, force_fresh=False) -> List[Dict]:
         """
         Get personalized recommendations using hybrid approach.
@@ -762,6 +834,9 @@ class HybridRecommendationEngine:
             for a in self.profile.data.get('base_data', {}).get('top_artists', [])
         }
 
+        # Thompson Sampling source weights — computed once before the scoring loop
+        source_weights = self.get_recommendation_weights()
+
         for rec in recommendations:
             artist_name = rec.get('artist', '')
 
@@ -782,6 +857,10 @@ class HybridRecommendationEngine:
 
             # LOCKED formula — do not adjust weights
             rec['score'] = 0.4 * genre_sim + 0.3 * novelty + 0.3 * feedback_multiplier
+
+            # Post-score multiplier: apply Thompson-sampled source weight.
+            # Unknown source (no key) gets 1.0 — neutral, no boost or penalty.
+            rec['score'] *= source_weights.get(rec.get('source', ''), 1.0)
 
         recommendations.sort(key=lambda x: x['score'], reverse=True)
         return recommendations
