@@ -105,9 +105,12 @@ class HybridRecommendationEngine:
         """
         source_stats = self.profile.data.get('source_stats', {})
 
-        # Pure cold-start: no stats at all — return static defaults + sentinel
+        # Pure cold-start: no stats at all — return neutral 1.0 weights + sentinel.
+        # Using 1.0 (not the static defaults) keeps the source multiplier neutral
+        # when no source_stats have been recorded yet, so the base score formula
+        # is unaffected during cold-start.
         if not source_stats:
-            result = dict(SOURCE_DEFAULTS)
+            result = {source: 1.0 for source in SOURCE_DEFAULTS}
             result['bandit_active'] = True
             return result
 
@@ -129,7 +132,7 @@ class HybridRecommendationEngine:
         # Normalize so weights sum to 1.0
         total = sum(thetas.values())
         if total == 0.0:
-            result = dict(SOURCE_DEFAULTS)
+            result = {source: 1.0 for source in SOURCE_DEFAULTS}
             result['bandit_active'] = True
             return result
 
@@ -831,6 +834,9 @@ class HybridRecommendationEngine:
             for a in self.profile.data.get('base_data', {}).get('top_artists', [])
         }
 
+        # Thompson Sampling source weights — computed once before the scoring loop
+        source_weights = self.get_recommendation_weights()
+
         for rec in recommendations:
             artist_name = rec.get('artist', '')
 
@@ -851,6 +857,10 @@ class HybridRecommendationEngine:
 
             # LOCKED formula — do not adjust weights
             rec['score'] = 0.4 * genre_sim + 0.3 * novelty + 0.3 * feedback_multiplier
+
+            # Post-score multiplier: apply Thompson-sampled source weight.
+            # Unknown source (no key) gets 1.0 — neutral, no boost or penalty.
+            rec['score'] *= source_weights.get(rec.get('source', ''), 1.0)
 
         recommendations.sort(key=lambda x: x['score'], reverse=True)
         return recommendations
