@@ -265,11 +265,12 @@ class PersonalizationEngine:
         # Avoid circular import at module level
         from apps.core.models import UserProfile
 
-        genres = getattr(feedback.track, 'genres', None) or []
+        raw_genres = getattr(feedback.track, 'genres', None)
+        genres = raw_genres if isinstance(raw_genres, list) else []
         if not genres:
             logger.warning(
                 "apply_feedback_learning: track %s has no genres — skipping taste_vector update",
-                feedback.track.spotify_id,
+                getattr(feedback.track, 'spotify_id', '?'),
             )
             return
 
@@ -300,16 +301,51 @@ class PersonalizationEngine:
     
     def remove_feedback_learning(self, track_id: str):
         """
-        Remove learning effects when a user unlikes a track.
-        
+        Reverse the taste_vector increment made when a track was liked.
+
+        Decrements each genre of the track by TASTE_VECTOR_LR, clamped to 0.
+        Persists to DB via profile.save(update_fields=['data']).
+
+        Does NOT delete the UserFeedback row — the caller (views.py) handles that.
+        UserProfile and Track are imported inside the method body to avoid circular imports.
+
         Args:
-            track_id: Spotify track ID to remove feedback for
+            track_id: Spotify track ID whose genre weights should be decremented
         """
-        logger.info(f"Removing feedback learning for track {track_id}")
-        
-        # Learning reversal will be wired in Phase 2.
-        # Do NOT delete the feedback record here — the view already did it.
-        logger.info(f"Removing feedback learning for track {track_id}")
+        # Avoid circular import at module level
+        from apps.core.models import UserProfile, Track as TrackModel
+
+        try:
+            track = TrackModel.objects.get(spotify_id=track_id)
+        except TrackModel.DoesNotExist:
+            logger.warning(
+                "remove_feedback_learning: track %s not found in DB — skipping",
+                track_id,
+            )
+            return
+
+        genres = track.genres or []
+        if not genres:
+            logger.warning(
+                "remove_feedback_learning: track %s has no genres — skipping taste_vector reversal",
+                track_id,
+            )
+            return
+
+        profile = UserProfile.objects.get(user=self.user)
+        taste_vector = profile.data.get('taste_vector', {})
+
+        for genre in genres:
+            taste_vector[genre] = max(0.0, taste_vector.get(genre, 0.0) - TASTE_VECTOR_LR)
+
+        profile.data['taste_vector'] = taste_vector
+        profile.save(update_fields=['data'])
+        logger.info(
+            "Reversed taste_vector for user %s: removed %s genre weights for track %s",
+            self.user.id,
+            len(genres),
+            track_id,
+        )
     
     def get_personalization_summary(self) -> Dict:
         """
