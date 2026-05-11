@@ -26,6 +26,9 @@ from apps.core.models import UserPreferences, UserFeedback, Track
 
 logger = logging.getLogger(__name__)
 
+# Learning rate for online taste-vector updates (Phase 3)
+TASTE_VECTOR_LR = 0.1
+
 class PersonalizationEngine:
     """
     Rule-based personalization engine that learns from user feedback.
@@ -250,21 +253,49 @@ class PersonalizationEngine:
     
     def apply_feedback_learning(self, feedback: UserFeedback):
         """
-        Update user preferences based on new feedback.
+        Update UserProfile.data['taste_vector'] based on new feedback.
 
-        Phase 1: no-op — taste vector update wired in Phase 2.
-        Root cause of removed body: UserPreferences has no update_weights method.
-        The update_weights(self, weights) method exists only on UserProfile (models.py:~151)
-        and takes 1 argument, not 2. Calling it from here was a crash on every LIKE/DISLIKE.
+        LIKE or SAVE: increment each genre weight by TASTE_VECTOR_LR.
+        DISLIKE or SKIP: decrement each genre weight by TASTE_VECTOR_LR, clamped to 0.
+        Other feedback types (PLAY, etc.): no taste_vector change.
 
-        TODO Phase 2: build weights_dict from feedback.track_features and call:
-            UserProfile.objects.get(user=self.user).update_weights(weights_dict)
-        where weights_dict shape matches what UserProfile.update_weights expects.
+        Changes persist to DB via profile.save(update_fields=['data']).
+        UserProfile is imported inside the method body to avoid circular imports.
         """
+        # Avoid circular import at module level
+        from apps.core.models import UserProfile
+
+        genres = getattr(feedback.track, 'genres', None) or []
+        if not genres:
+            logger.warning(
+                "apply_feedback_learning: track %s has no genres — skipping taste_vector update",
+                feedback.track.spotify_id,
+            )
+            return
+
+        profile = UserProfile.objects.get(user=self.user)
+        taste_vector = profile.data.get('taste_vector', {})
+
+        if feedback.feedback_type in ('LIKE', 'SAVE'):
+            for genre in genres:
+                taste_vector[genre] = taste_vector.get(genre, 0.0) + TASTE_VECTOR_LR
+        elif feedback.feedback_type in ('DISLIKE', 'SKIP'):
+            for genre in genres:
+                taste_vector[genre] = max(0.0, taste_vector.get(genre, 0.0) - TASTE_VECTOR_LR)
+        else:
+            logger.info(
+                "apply_feedback_learning: no taste_vector change for feedback type %s",
+                feedback.feedback_type,
+            )
+            return
+
+        profile.data['taste_vector'] = taste_vector
+        profile.save(update_fields=['data'])
         logger.info(
-            "apply_feedback_learning: Phase 1 no-op for %s on %s",
+            "Updated taste_vector for user %s: %s genres from %s",
+            self.user.id,
+            len(genres),
             feedback.feedback_type,
-            feedback.track.name,
         )
     
     def remove_feedback_learning(self, track_id: str):
