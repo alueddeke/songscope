@@ -9,6 +9,7 @@ This engine implements a sophisticated recommendation system that:
 5. Respects Spotify API rate limits and terms of service
 """
 
+import math
 import numpy as np
 import logging
 from typing import List, Dict, Any, Optional, Tuple
@@ -837,6 +838,13 @@ class HybridRecommendationEngine:
         # Thompson Sampling source weights — computed once before the scoring loop
         source_weights = self.get_recommendation_weights()
 
+        # Bell-curve novelty: read preferred_popularity_range once before the loop.
+        # Defaults: midpoint=30, width=20 (cold-start / no preference set).
+        prefs = self.profile.data.get('preferences', {})
+        pop_range = prefs.get('preferred_popularity_range', {'midpoint': 30, 'width': 20})
+        midpoint = pop_range.get('midpoint', 30)
+        width = pop_range.get('width', 20)
+
         for rec in recommendations:
             artist_name = rec.get('artist', '')
 
@@ -844,8 +852,11 @@ class HybridRecommendationEngine:
             candidate_genres = {g: 1.0 for g in artist_genre_lookup.get(artist_name, [])}
             genre_sim = self._cosine_similarity(candidate_genres, taste_vector)
 
-            # novelty: inverse of popularity (low popularity = high novelty)
-            novelty = 1.0 - (rec.get('popularity', 50) / 100.0)
+            # novelty: Gaussian bell-curve centred at preferred popularity midpoint.
+            # novelty = exp(-((popularity - midpoint)^2) / (2 * width^2))
+            # Peaks at 1.0 when popularity == midpoint; decays symmetrically outward.
+            popularity = rec.get('popularity', 50)
+            novelty = math.exp(-((popularity - midpoint) ** 2) / (2 * width ** 2))
 
             # feedback_multiplier: artist-level preference signal
             if artist_name in liked_artists:
@@ -854,6 +865,14 @@ class HybridRecommendationEngine:
                 feedback_multiplier = 0.5
             else:
                 feedback_multiplier = 1.0
+
+            # Store score components for downstream use (e.g., get_daily_gem API response)
+            rec['score_breakdown'] = {
+                'genre_sim': round(genre_sim, 4),
+                'novelty': round(novelty, 4),
+                'feedback_multiplier': round(feedback_multiplier, 4),
+                'source': rec.get('source', ''),
+            }
 
             # LOCKED formula — do not adjust weights
             rec['score'] = 0.4 * genre_sim + 0.3 * novelty + 0.3 * feedback_multiplier

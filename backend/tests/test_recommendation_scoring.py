@@ -129,49 +129,65 @@ class TestScoreFormula(unittest.TestCase):
 
     def test_locked_formula_weights(self):
         """score = 0.4*genre_sim + 0.3*novelty + 0.3*feedback_multiplier (LOCKED)"""
-        # popularity=0 → novelty=1.0; neutral artist; exact genre match → genre_sim=1.0
+        # popularity=30 = default midpoint → bell-curve novelty peaks at 1.0
+        # neutral artist; exact genre match → genre_sim=1.0
         engine = make_engine(
             taste_vector={'indie rock': 5},
             top_artists=[{'name': 'Band A', 'genres': ['indie rock']}],
         )
-        recs = [_make_rec(artist='Band A', popularity=0)]
+        recs = [_make_rec(artist='Band A', popularity=30)]
         result = engine._score_recommendations(recs)
-        # genre_sim=1.0, novelty=1.0, feedback_multiplier=1.0 (neutral)
+        # genre_sim=1.0, novelty=1.0 (bell-curve peak at midpoint=30), feedback_multiplier=1.0
         # score = 0.4*1.0 + 0.3*1.0 + 0.3*1.0 = 1.0
         self.assertAlmostEqual(result[0]['score'], 1.0, places=4)
 
     def test_unknown_artist_genre_sim_is_zero(self):
         """D-06: artist not in top_artists → genre_sim=0.0"""
+        import math
         engine = make_engine(taste_vector={'indie rock': 5})
         recs = [_make_rec(artist='Unknown Artist', popularity=50)]
         result = engine._score_recommendations(recs)
-        # genre_sim=0.0, novelty=0.5, feedback_multiplier=1.0
-        # score = 0.0 + 0.3*0.5 + 0.3*1.0 = 0.15 + 0.30 = 0.45
-        self.assertAlmostEqual(result[0]['score'], 0.45, places=4)
+        # Bell-curve novelty at pop=50, midpoint=30, width=20:
+        # novelty = exp(-((50-30)^2) / (2*20^2)) = exp(-400/800) ≈ 0.6065
+        # genre_sim=0.0, feedback_multiplier=1.0
+        # score = 0.0 + 0.3*0.6065 + 0.3*1.0 ≈ 0.4819
+        expected_novelty = math.exp(-((50 - 30) ** 2) / (2 * 20 ** 2))
+        expected_score = 0.0 + 0.3 * expected_novelty + 0.3 * 1.0
+        self.assertAlmostEqual(result[0]['score'], expected_score, places=4)
 
     def test_liked_artist_boosts_feedback_multiplier(self):
         """liked artist → feedback_multiplier=1.5"""
+        import math
         engine = make_engine(
             taste_vector={},
             liked_artists=['Great Band'],
         )
         recs = [_make_rec(artist='Great Band', popularity=100)]
         result = engine._score_recommendations(recs)
-        # genre_sim=0.0, novelty=0.0, feedback_multiplier=1.5
-        # score = 0.0 + 0.0 + 0.3*1.5 = 0.45
-        self.assertAlmostEqual(result[0]['score'], 0.45, places=4)
+        # Bell-curve novelty at pop=100, midpoint=30, width=20:
+        # novelty = exp(-((100-30)^2) / (2*20^2)) = exp(-4900/800) ≈ 0.0022
+        # genre_sim=0.0, feedback_multiplier=1.5
+        # score = 0.0 + 0.3*novelty + 0.3*1.5
+        expected_novelty = math.exp(-((100 - 30) ** 2) / (2 * 20 ** 2))
+        expected_score = 0.0 + 0.3 * expected_novelty + 0.3 * 1.5
+        self.assertAlmostEqual(result[0]['score'], expected_score, places=4)
 
     def test_disliked_artist_reduces_feedback_multiplier(self):
         """disliked artist → feedback_multiplier=0.5"""
+        import math
         engine = make_engine(
             taste_vector={},
             disliked_artists=['Bad Band'],
         )
         recs = [_make_rec(artist='Bad Band', popularity=0)]
         result = engine._score_recommendations(recs)
-        # genre_sim=0.0, novelty=1.0, feedback_multiplier=0.5
-        # score = 0.0 + 0.3*1.0 + 0.3*0.5 = 0.30 + 0.15 = 0.45
-        self.assertAlmostEqual(result[0]['score'], 0.45, places=4)
+        # Bell-curve novelty at pop=0, midpoint=30, width=20:
+        # novelty = exp(-((0-30)^2) / (2*20^2)) = exp(-900/800) ≈ 0.3247
+        # genre_sim=0.0, feedback_multiplier=0.5
+        # score = 0.0 + 0.3*novelty + 0.3*0.5
+        expected_novelty = math.exp(-((0 - 30) ** 2) / (2 * 20 ** 2))
+        expected_score = 0.0 + 0.3 * expected_novelty + 0.3 * 0.5
+        self.assertAlmostEqual(result[0]['score'], expected_score, places=4)
 
     def test_results_sorted_descending(self):
         """Higher-scoring rec appears first"""

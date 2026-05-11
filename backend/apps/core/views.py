@@ -13,7 +13,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, date
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
@@ -846,9 +846,9 @@ def get_artist_details(request, artist_id):
         }
         
         logger.info(f"Retrieved detailed info for artist: {artist['name']}")
-        
+
         return JsonResponse(artist_data)
-        
+
     except SpotifyException as e:
         logger.error(f"Spotify API error: {str(e)}")
         return JsonResponse({'error': str(e)}, status=e.http_status)
@@ -857,3 +857,126 @@ def get_artist_details(request, artist_id):
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_daily_gem(request):
+    """
+    Return today's daily gem for the authenticated user.
+
+    Cached branch: if a DailyGem row already exists for today, return it immediately
+    with score_breakdown: {} (we don't re-score cached gems).
+
+    Fresh branch: generate recommendations via HybridRecommendationEngine, pick the
+    top-scored candidate, persist it as a DailyGem row, and return the response with
+    score_breakdown populated from _score_recommendations().
+
+    Authentication: @permission_classes([IsAuthenticated]) — unauthenticated requests
+    receive 403 (DRF default), not 404. (T-03-11 mitigation)
+    """
+    try:
+        today = date.today()
+
+        # --- Cached branch ---------------------------------------------------
+        try:
+            gem = DailyGem.objects.get(user=request.user, date=today)
+            track = gem.track
+            return JsonResponse({
+                'track': {
+                    'id': track.spotify_id,
+                    'name': track.name,
+                    'artist': track.artist,
+                    'album': track.album,
+                    'popularity': track.popularity if hasattr(track, 'popularity') else 0,
+                    'image_url': gem.image_url or None,
+                    'preview_url': gem.preview_url or None,
+                },
+                'explanation': gem.explanation,
+                'date': str(gem.date),
+                'cached': True,
+                'score_breakdown': {},
+            })
+        except DailyGem.DoesNotExist:
+            pass  # Fall through to fresh branch
+
+        # --- Fresh branch ----------------------------------------------------
+        try:
+            spotify_token = SpotifyToken.objects.get(user=request.user)
+            if spotify_token.is_expired():
+                spotify_token = refresh_spotify_token(spotify_token)
+        except SpotifyToken.DoesNotExist:
+            return JsonResponse({'error': 'Spotify token not found'}, status=404)
+
+        force_new = request.GET.get('force_new', 'false').lower() == 'true'
+
+        engine = HybridRecommendationEngine(request.user)
+        candidates = engine.get_recommendations(limit=10, force_fresh=force_new)
+
+        if not candidates:
+            return JsonResponse({'error': 'No recommendations available'}, status=503)
+
+        # Top candidate (already sorted descending by _score_recommendations)
+        gem_data = candidates[0]
+
+        # Persist Track to DB
+        track_obj, _ = Track.objects.get_or_create(
+            spotify_id=gem_data['id'],
+            defaults={
+                'name': gem_data.get('name', ''),
+                'artist': gem_data.get('artist', ''),
+                'album': gem_data.get('album', ''),
+            },
+        )
+
+        # Persist DailyGem row (unique_together user+date enforces one gem per day)
+        gem, created = DailyGem.objects.get_or_create(
+            user=request.user,
+            date=today,
+            defaults={
+                'track': track_obj,
+                'explanation': '',
+                'image_url': gem_data.get('image_url') or '',
+                'preview_url': gem_data.get('preview_url') or '',
+                'track_popularity': gem_data.get('popularity', 0),
+            },
+        )
+        if not created:
+            # Race condition: another request created the gem between our DoesNotExist
+            # and get_or_create — return the cached one.
+            track = gem.track
+            return JsonResponse({
+                'track': {
+                    'id': track.spotify_id,
+                    'name': track.name,
+                    'artist': track.artist,
+                    'album': track.album,
+                    'popularity': track.popularity if hasattr(track, 'popularity') else 0,
+                    'image_url': gem.image_url or None,
+                    'preview_url': gem.preview_url or None,
+                },
+                'explanation': gem.explanation,
+                'date': str(gem.date),
+                'cached': True,
+                'score_breakdown': {},
+            })
+
+        return JsonResponse({
+            'track': {
+                'id': gem_data.get('id', ''),
+                'name': gem_data.get('name', ''),
+                'artist': gem_data.get('artist', ''),
+                'album': gem_data.get('album', ''),
+                'popularity': gem_data.get('popularity', 0),
+                'image_url': gem_data.get('image_url'),
+                'preview_url': gem_data.get('preview_url'),
+            },
+            'explanation': '',
+            'date': str(today),
+            'cached': False,
+            'score_breakdown': gem_data.get('score_breakdown', {}),
+        })
+
+    except Exception as e:
+        logger.error(f"Error in get_daily_gem: {str(e)}", exc_info=True)
+        return JsonResponse({'error': 'Failed to generate daily gem'}, status=500)
