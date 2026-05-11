@@ -293,26 +293,28 @@ class TestThompsonBandit(unittest.TestCase):
 
     def test_beta_sample_increases_with_successes(self):
         """
-        After recording 5 successes for 'artist_network', the dynamic weight
-        returned by get_recommendation_weights()['artist_network'] must exceed
-        the static cold-start default (0.25).
+        After recording 5 successes for 'artist_network', the AVERAGE dynamic
+        weight over 20 draws must exceed the static cold-start default (0.25).
 
-        Expected: Thompson sampling draws from Beta(6, 1) → mean ~0.857, which
-        is well above 0.25 for any reasonable draw.
-
-        Current: get_recommendation_weights() ignores source_stats and returns
-        the static dict → value == 0.25, not > 0.25 → RED.
+        Beta(6, 1) has mean ~0.857 — far above 0.25.  A single draw has a
+        ~0.024 % chance of falling below 0.25, causing a spurious CI failure.
+        Averaging 20 independent draws reduces that risk to effectively zero
+        while keeping the test honest about the stochastic nature of the bandit.
         """
         engine = make_engine_with_stats("artist_network", successes=5, failures=0)
-        weights = engine.get_recommendation_weights()
-        artist_network_weight = weights.get("artist_network", 0.0)
+        draws = [
+            engine.get_recommendation_weights().get("artist_network", 0.0)
+            for _ in range(20)
+        ]
+        avg_weight = sum(draws) / len(draws)
         self.assertGreater(
-            artist_network_weight,
+            avg_weight,
             self.COLD_START_DEFAULTS["artist_network"],
             msg=(
-                f"With 5 successes, 'artist_network' weight should exceed the cold-start "
-                f"default of {self.COLD_START_DEFAULTS['artist_network']}. "
-                f"Got {artist_network_weight}. "
+                f"With 5 successes, mean 'artist_network' weight over 20 draws "
+                f"should exceed the cold-start default of "
+                f"{self.COLD_START_DEFAULTS['artist_network']}. "
+                f"Got mean={avg_weight:.4f}. "
                 f"(Thompson sampling not yet implemented — expected RED)"
             ),
         )

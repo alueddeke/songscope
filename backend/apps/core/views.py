@@ -489,6 +489,12 @@ def submit_feedback(request):
 
             return JsonResponse({'status': 'success', 'action': 'removed'})
         else:
+            # If a prior LIKE exists and we're replacing it (e.g. LIKE → DISLIKE),
+            # undo the LIKE's taste-vector increment before applying the new feedback.
+            prior_like = UserFeedback.objects.filter(
+                user=request.user, track=track, feedback_type='LIKE'
+            ).first()
+
             # Create or update feedback entry — update_or_create prevents
             # IntegrityError from unique_together(user, track) when the same
             # user submits different feedback types for the same track.
@@ -498,9 +504,13 @@ def submit_feedback(request):
                 defaults={'feedback_type': feedback_type, 'track_features': {}}
             )
 
-            # Update recommendations using the enhanced personalization engine
             from apps.recommendations.personalization_engine import PersonalizationEngine
             personalization_engine = PersonalizationEngine(request.user)
+
+            if prior_like and feedback_type != 'LIKE':
+                personalization_engine.remove_feedback_learning(track.spotify_id)
+
+            # Update recommendations using the enhanced personalization engine
             personalization_engine.apply_feedback_learning(feedback)
             
             # Also update hybrid profile
@@ -667,17 +677,18 @@ def get_user_name(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_track_to_liked(request):
-    """Get user's name using Spotipy"""
+    """Add a track to the user's Spotify liked songs library."""
     try:
+        payload = json.loads(request.body.decode('utf-8'))
+        track_id = payload.get("track_id")
+        if not track_id:
+            return JsonResponse({'error': 'track_id is required'}, status=400)
+
         spotify_token = SpotifyToken.objects.get(user=request.user)
         if spotify_token.is_expired():
             spotify_token = refresh_spotify_token(spotify_token)
-        
+
         sp = get_spotipy_client(spotify_token.access_token)
-
-        payload = json.loads(request.body.decode('utf-8'))
-        track_id = payload.get("track_id")
-
         sp.current_user_saved_tracks_add([track_id])
 
         return JsonResponse({'message': "all good"})

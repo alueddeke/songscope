@@ -270,7 +270,7 @@ class HybridRecommendationEngine:
             
             # Debug: Log what we're returning
             for i, rec in enumerate(final_recommendations[:3]):  # Log first 3
-                logger.info(f"Recommendation {i+1}: {rec['name']} by {rec['artist']} (source: {rec['source']}, popularity: {rec.get('popularity', 'N/A')})")
+                logger.debug(f"Recommendation {i+1}: {rec['name']} by {rec['artist']} (source: {rec['source']}, popularity: {rec.get('popularity', 'N/A')})")
             
             # Add to cache
             self.profile.add_to_cache(final_recommendations)
@@ -387,7 +387,7 @@ class HybridRecommendationEngine:
             
             # Log how many liked songs we actually loaded
             logger.info(f"Loaded {len(saved_tracks_list)} Spotify liked songs")
-            logger.info(f"Sample liked songs: {[track['name'] for track in saved_tracks_list[:5]]}")
+            logger.debug(f"Sample liked songs: {[track['name'] for track in saved_tracks_list[:5]]}")
         except Exception as e:
             logger.error(f"Error updating saved tracks: {str(e)}")
             self._add_error('saved_tracks', 'api_failure', str(e))
@@ -724,7 +724,7 @@ class HybridRecommendationEngine:
                                                 'image_url': track['album']['images'][0]['url'] if track['album']['images'] else None,
                                                 'source': 'contextual',
                                                 'time_period': time_period,
-                                                'score': 0.3,  # Boost contextual recommendations
+                                                'score': 0.0,
                                                 'popularity': track.get('popularity', 0)
                                             })
                                             
@@ -843,7 +843,7 @@ class HybridRecommendationEngine:
         prefs = self.profile.data.get('preferences', {})
         pop_range = prefs.get('preferred_popularity_range', {'midpoint': 30, 'width': 20})
         midpoint = pop_range.get('midpoint', 30)
-        width = pop_range.get('width', 20)
+        width = pop_range.get('width', 20) or 20  # guard against width=0 → ZeroDivisionError
 
         for rec in recommendations:
             artist_name = rec.get('artist', '')
@@ -959,7 +959,7 @@ class HybridRecommendationEngine:
             
             for rec in recommendations:
                 if rec['id'] in recent_track_ids:
-                    logger.info(f"Filtered out recently played: {rec['name']} by {rec['artist']}")
+                    logger.debug(f"Filtered out recently played: {rec['name']} by {rec['artist']}")
                     filtered_count += 1
                     continue
                 filtered_recommendations.append(rec)

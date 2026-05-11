@@ -274,7 +274,14 @@ class PersonalizationEngine:
             )
             return
 
-        profile = UserProfile.objects.get(user=self.user)
+        try:
+            profile = UserProfile.objects.get(user=self.user)
+        except UserProfile.DoesNotExist:
+            logger.warning(
+                "apply_feedback_learning: no UserProfile for user %s — skipping",
+                getattr(self.user, 'id', '?'),
+            )
+            return
         taste_vector = profile.data.get('taste_vector', {})
 
         if feedback.feedback_type in ('LIKE', 'SAVE'):
@@ -291,6 +298,22 @@ class PersonalizationEngine:
             return
 
         profile.data['taste_vector'] = taste_vector
+
+        # Update source_stats so Thompson bandit can learn which sources produce liked tracks.
+        # Source is read from the most recent RecommendationLog entry for this track.
+        from apps.core.models import RecommendationLog
+        log = RecommendationLog.objects.filter(
+            user=self.user, track=feedback.track
+        ).order_by('-recommended_at').first()
+        source = log.source if log and log.source else ''
+        if source:
+            source_stats = profile.data.setdefault('source_stats', {})
+            stats = source_stats.setdefault(source, {'s': 0, 'f': 0})
+            if feedback.feedback_type in ('LIKE', 'SAVE'):
+                stats['s'] = stats.get('s', 0) + 1
+            elif feedback.feedback_type in ('DISLIKE', 'SKIP'):
+                stats['f'] = stats.get('f', 0) + 1
+
         profile.save(update_fields=['data'])
         logger.info(
             "Updated taste_vector for user %s: %s genres from %s",
@@ -298,7 +321,7 @@ class PersonalizationEngine:
             len(genres),
             feedback.feedback_type,
         )
-    
+
     def remove_feedback_learning(self, track_id: str):
         """
         Reverse the taste_vector increment made when a track was liked.
@@ -332,7 +355,14 @@ class PersonalizationEngine:
             )
             return
 
-        profile = UserProfile.objects.get(user=self.user)
+        try:
+            profile = UserProfile.objects.get(user=self.user)
+        except UserProfile.DoesNotExist:
+            logger.warning(
+                "remove_feedback_learning: no UserProfile for user %s — skipping",
+                getattr(self.user, 'id', '?'),
+            )
+            return
         taste_vector = profile.data.get('taste_vector', {})
 
         for genre in genres:
