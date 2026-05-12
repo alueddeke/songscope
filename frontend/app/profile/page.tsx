@@ -3,13 +3,18 @@ import Image from 'next/image'
 import { redirect } from 'next/navigation'
 import Recommendation from './components/Recommendation/Recommendation'
 import TopArtists from './components/TopArtists/TopArtists'
+import MetricsStrip from './components/MetricsStrip/MetricsStrip'
+import LikeTrendChart from './components/LikeTrendChart/LikeTrendChart'
+import TasteProfileChart from './components/TasteProfileChart/TasteProfileChart'
+import DiversityScore from './components/DiversityScore/DiversityScore'
+import ImprovementStory from './components/ImprovementStory/ImprovementStory'
 
 async function getUserName() {
   const cookieStore = cookies()
   // Get your Django session cookie - you'll need to check the exact name
   // It's often something like 'sessionid' or 'csrftoken'
   const sessionCookie = cookieStore.get('sessionid')
-  
+
   if (!sessionCookie) {
     redirect('/') // or your login page
   }
@@ -64,6 +69,26 @@ const UserProfile = async () => {
 
       <section className="py-64">
         <TopArtists/>
+      </section>
+
+      <MetricsStrip />
+
+      <section className="w-full border-t border-gray-800 py-16 px-4 md:px-8 lg:px-16">
+        <h2 className="text-2xl font-bold text-white mb-8">How your taste is evolving</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          <div>
+            <p className="text-xs text-gray-500 uppercase tracking-widest mb-4">Like-rate trend (7-day rolling)</p>
+            <LikeTrendChart />
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 uppercase tracking-widest mb-4">Your taste profile</p>
+            <TasteProfileChart />
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-8 mt-12 pt-8 border-t border-gray-800">
+          <DiversityScore />
+          <ImprovementStory />
+        </div>
       </section>
     </div>
   );
