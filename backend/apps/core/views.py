@@ -18,7 +18,6 @@ from datetime import timedelta, date
 from itertools import combinations
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import SessionAuthentication
 from requests_oauthlib import OAuth2Session
 import spotipy
 from spotipy.exceptions import SpotifyException
@@ -32,10 +31,6 @@ from apps.recommendations.recommendation_engine import RecommendationEngine
 from apps.recommendations.hybrid_recommendation_engine import HybridRecommendationEngine
 from apps.ai.ai_feedback_service import FeedbackInterpreter, RateLimitExceeded, CostLimitExceeded
 from utils.logging_config import logger
-
-class CsrfExemptSessionAuthentication(SessionAuthentication):
-    def enforce_csrf(self, request):
-        return  # To not enforce CSRF token
 
 if settings.OAUTHLIB_INSECURE_TRANSPORT:
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
