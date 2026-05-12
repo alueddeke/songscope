@@ -30,15 +30,8 @@ CSRF_TRUSTED_ORIGINS = ['http://localhost:3000']
 CSRF_COOKIE_SECURE = False
 
 
-# SECURITY WARNING: keep the secret key used in production secret!
-# TODO: the key below has been committed to version control and MUST be rotated.
-# Generate a new key with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
-# then set SECRET_KEY in your environment / .env file.
-import os
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-fallback-dev-only')
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'False') == 'True'
+SECRET_KEY = config('SECRET_KEY')
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = ["localhost", "localhost:8000"]
 
