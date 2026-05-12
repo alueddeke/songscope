@@ -104,6 +104,29 @@ Plans:
 
 ---
 
+## Phase 5: Security Hardening
+**Goal:** Eliminate the three known security issues before any public sharing or deployment: rotate the committed SECRET_KEY, move Spotify credentials server-side only, and re-enable CSRF protection on all feedback endpoints.
+
+**Key deliverables:**
+- `SECRET_KEY` moved to environment variable via python-decouple `config()`, old key rotated (new key generated, not committed)
+- Spotify `CLIENT_SECRET` removed from `frontend/next.config.mjs` env block; only accessible server-side in Django
+- `CsrfExemptSessionAuthentication` removed from `views.py`; `CsrfViewMiddleware` uncommented in `MIDDLEWARE`
+- `.env.example` file at repo root (and `backend/.env.example`) documenting all required environment variables
+- All existing tests pass after changes
+
+**Why this order:** Security is a prerequisite for sharing the portfolio URL or deploying. Must be done before collaborative filtering (which adds a real user base).
+
+**Concepts introduced:** Secret rotation, CSRF protection, environment variable hygiene, defence in depth
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — Wave 1: Backend security surgery — rotate SECRET_KEY via decouple + uncomment CsrfViewMiddleware + delete CsrfExemptSessionAuthentication dead code
+- [ ] 05-02-PLAN.md — Wave 1: Frontend credential exposure removal — strip env block + dotenv import from next.config.mjs
+- [ ] 05-03-PLAN.md — Wave 2: Create .env.example (root + backend/) + run full regression test suite + record manual smoke-test checklist
+
+---
+
 ## Dependency Order
 
 ```
@@ -111,6 +134,7 @@ Phase 1 (bugs + foundation)
     → Phase 2 (taste vector + scoring)
         → Phase 3 (feedback learning)
             → Phase 4 (metrics + docs)
+                → Phase 5 (security hardening)
 ```
 
 All sequential — each phase depends on the previous.
@@ -125,4 +149,4 @@ Tracked in PROJECT.md Active requirements for future milestone.
 
 ---
 
-_Last updated: 2026-05-07_
+_Last updated: 2026-05-12_
