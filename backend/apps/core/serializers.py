@@ -1,0 +1,57 @@
+from django.contrib.auth.models import User, Group
+from rest_framework import serializers
+from .models import UserFeedback, AIFeedback
+
+class UserSerializer(serializers.HyperlinkedModelSerializer):
+    # inherit from hyperlink model, using a hyperlink/url instead of typical primary key relationship
+    class Meta:
+        model = User
+        fields = ['url', 'username', 'email', 'groups']
+
+    
+class GroupSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model= Group
+        fields = ['url', 'name']
+
+
+
+class AudioFeaturesSerializer(serializers.Serializer):
+    acousticness = serializers.FloatField()
+    instrumentalness = serializers.FloatField()
+    energy = serializers.FloatField()
+    valence = serializers.FloatField()
+    danceability = serializers.FloatField()
+    tempo = serializers.FloatField()
+    loudness = serializers.FloatField()
+    duration_ms = serializers.FloatField()
+    liveness = serializers.FloatField()
+    key = serializers.FloatField()
+    mode = serializers.FloatField()
+
+class UserProfileSerializer(serializers.Serializer):
+    weighted_features = AudioFeaturesSerializer()
+    top_genres = serializers.ListField(
+        child=serializers.ListField(
+            child=serializers.CharField()
+        )
+    )
+    top_artists = serializers.ListField(
+        child=serializers.ListField(
+            child=serializers.CharField()
+        )
+    )
+
+
+class FeedbackSubmissionSerializer(serializers.Serializer):
+    track_id = serializers.CharField(max_length=255)
+    feedback_type = serializers.ChoiceField(choices=[
+        ('LIKE', 'Like'),
+        ('DISLIKE', 'Dislike'),
+        ('SKIP', 'Skip'),
+        ('SAVE', 'Save'),
+    ])
+
+class AIFeedbackSubmissionSerializer(serializers.Serializer):
+    track_id = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    feedback_text = serializers.CharField(max_length=1000)

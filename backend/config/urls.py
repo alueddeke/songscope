@@ -1,0 +1,56 @@
+"""
+URL configuration for SongScope project.
+
+The `urlpatterns` list routes URLs to views. For more information please see:
+    https://docs.djangoproject.com/en/5.0/topics/http/urls/
+Examples:
+Function views
+    1. Add an import:  from my_app import views
+    2. Add a URL to urlpatterns:  path('', views.home, name='home')
+Class-based views
+    1. Add an import:  from other_app.views import Home
+    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
+Including another URLconf
+    1. Import the include() function: from django.urls import include, path
+    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+"""
+
+from django.contrib import admin
+from django.urls import path, include
+from rest_framework import routers
+from apps.core import views
+
+
+# this is where you would define routes - your get one, post one, etc...
+# if you register your viewset to routers, it does all this for you
+# less code but good for most cases, if you need more control, do it manually
+router = routers.DefaultRouter()
+
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('', include(router.urls)),
+    path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
+    path('spotify-login/', views.spotify_login, name='spotify-login'),
+    path('spotify/callback/', views.spotify_callback, name='spotify-callback'),
+    path('api/check-auth/', views.check_auth, name='check_auth'),
+    path('api/check-spotify-token/', views.check_spotify_token, name='check_spotify_token'),
+    path('api/debug-auth/', views.debug_auth, name='debug_auth'),
+    path('api/personalization-summary/', views.get_personalization_summary, name='personalization_summary'),
+    path('api/user-profile-summary/', views.get_user_profile_summary, name='user_profile_summary'),
+    path('api/update-user-profile/', views.update_user_profile, name='update_user_profile'),
+    path('api/user-top-tracks/', views.get_user_top_tracks, name='user_top_tracks'),
+    path('api/user-recently-played/', views.get_user_recently_played, name='user_recently_played'),
+    path('api/user-top-artists/', views.get_user_top_artists, name='user_top_artists'),
+    path('api/artist-details/<str:artist_id>/', views.get_artist_details, name='artist_details'),
+    path('api/recommendations/', views.get_track_recommendations, name='recommendations'),
+    path('api/daily-gem/', views.get_daily_gem, name='get_daily_gem'),
+    path('api/submit-feedback/', views.submit_feedback, name='submit_feedback'), 
+    path('api/submit-ai-feedback/', views.submit_ai_feedback, name='submit_ai_feedback'),
+    path('api/check-track-feedback/<str:track_id>/', views.check_track_feedback, name='check_track_feedback'),
+    path('api/csrf-token/', views.get_csrf_token, name='csrf_token'),
+    path('api/get-user-name/', views.get_user_name, name='user_name'),
+    path('api/recommendation-metrics/', views.get_recommendation_metrics, name='recommendation_metrics'),
+    path('api/recommendation-trend/', views.get_recommendation_trend, name='recommendation_trend'),
+    path('api/add-track-to-liked/', views.add_track_to_liked, name='add_track_to_liked'),
+]
