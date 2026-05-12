@@ -50,5 +50,7 @@ urlpatterns = [
     path('api/check-track-feedback/<str:track_id>/', views.check_track_feedback, name='check_track_feedback'),
     path('api/csrf-token/', views.get_csrf_token, name='csrf_token'),
     path('api/get-user-name/', views.get_user_name, name='user_name'),
+    path('api/recommendation-metrics/', views.get_recommendation_metrics, name='recommendation_metrics'),
+    path('api/recommendation-trend/', views.get_recommendation_trend, name='recommendation_trend'),
     path('api/add-track-to-liked/', views.add_track_to_liked, name='add_track_to_liked'),
 ]

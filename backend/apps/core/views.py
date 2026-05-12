@@ -12,8 +12,10 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.db.models import Avg
 from django.utils import timezone
 from datetime import timedelta, date
+from itertools import combinations
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import SessionAuthentication
@@ -22,7 +24,7 @@ import spotipy
 from spotipy.exceptions import SpotifyException
 from spotipy.oauth2 import SpotifyOAuth
 
-from .models import SpotifyToken, Track, UserFeedback, UserPreferences, RecommendationLog, AIFeedback, DailyGem
+from .models import SpotifyToken, Track, UserFeedback, UserPreferences, RecommendationLog, AIFeedback, DailyGem, UserProfile
 from .serializers import FeedbackSubmissionSerializer, AIFeedbackSubmissionSerializer
 from apps.spotify.utils import get_spotipy_client, refresh_spotify_token
 from apps.recommendations.feature_extractor import extract_current_user_profile, get_recommendations
@@ -380,6 +382,153 @@ def get_user_profile_summary(request):
     except Exception as e:
         logger.error(f"Error getting user profile summary: {str(e)}")
         return JsonResponse({'error': 'Failed to get user profile summary'}, status=500)
+
+def _jaccard_distance(genres_a: list, genres_b: list) -> float:
+    """
+    Compute Jaccard distance between two genre lists.
+
+    Jaccard distance = 1 - |A ∩ B| / |A ∪ B|.
+    Convention: both empty → 0.0 (identical empty sets, distance zero).
+    If union is empty after dedup → 0.0 (guard against ZeroDivisionError).
+    """
+    a, b = set(genres_a), set(genres_b)
+    if not a and not b:
+        return 0.0
+    union = a | b
+    if not union:
+        return 0.0
+    return 1.0 - len(a & b) / len(union)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_recommendation_metrics(request):
+    """
+    Return on-the-fly recommendation metrics for the authenticated user.
+
+    Satisfies the MetricsStrip LOCKED interface (D-02) plus Phase 4 extension
+    fields (top_genres_pct, improvement_story, diversity_score).
+    All metrics computed from DailyGem + UserProfile.data — no new DB columns (D-01).
+    """
+    try:
+        user = request.user
+        gems = DailyGem.objects.filter(user=user).order_by('date')
+        gem_list = list(gems.values('was_liked', 'track_popularity', 'date', 'track_id'))
+        gem_total = len(gem_list)
+
+        if gem_total == 0:
+            return JsonResponse({'message': 'No gems yet'})
+
+        gem_liked = sum(1 for g in gem_list if g['was_liked'] is True)
+        gem_disliked = sum(1 for g in gem_list if g['was_liked'] is False)
+        # Ratio 0..1 (MetricsStrip multiplies by 100 for display)
+        gem_acceptance_rate = gem_liked / gem_total
+
+        avg_pop = gems.aggregate(avg=Avg('track_popularity'))['avg'] or 0
+        # hidden_gem_rate uses DailyGem.track_popularity, NOT RecommendationLog.was_novel (Pitfall 4)
+        hidden_gem_rate = round(
+            gems.filter(track_popularity__lt=40).count() / gem_total, 4
+        )
+
+        total_recommended = RecommendationLog.objects.filter(user=user).count()
+        # novel_track_rate: was_novel is always True (Pitfall 4); reuse hidden_gem_rate
+        novel_track_rate = hidden_gem_rate
+
+        # taste_vector → top 10 genres normalized to percentage (D-07)
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        taste_vector = profile.data.get('taste_vector', {})
+        sorted_genres = sorted(taste_vector.items(), key=lambda x: x[1], reverse=True)
+        top_genres = [g for g, _ in sorted_genres[:10]]
+        total_counts = sum(c for _, c in sorted_genres[:10]) or 1
+        top_genres_pct = [
+            {'genre': g, 'pct': round(c / total_counts * 100, 1)}
+            for g, c in sorted_genres[:10]
+        ]
+
+        # improvement_story: first 7 vs last 7 gems by like-rate (D-04)
+        if gem_total < 2:
+            improvement_story = {'first_7_rate': None, 'last_7_rate': None, 'delta': None}
+        else:
+            first_7 = gem_list[:7]
+            last_7 = gem_list[-7:]
+            f7_liked = sum(1 for g in first_7 if g['was_liked'] is True)
+            l7_liked = sum(1 for g in last_7 if g['was_liked'] is True)
+            first_7_rate = round(f7_liked / len(first_7) * 100)
+            last_7_rate = round(l7_liked / len(last_7) * 100)
+            delta = last_7_rate - first_7_rate
+            improvement_story = {
+                'first_7_rate': first_7_rate,
+                'last_7_rate': last_7_rate,
+                'delta': delta,
+            }
+
+        # diversity_score: mean pairwise Jaccard on DailyGem Track.genres (D-09, D-10, D-11)
+        track_ids = [g['track_id'] for g in gem_list]
+        track_genres_map = {
+            t['id']: t['genres']
+            for t in Track.objects.filter(id__in=track_ids).values('id', 'genres')
+        }
+        genre_lists = [track_genres_map.get(tid, []) for tid in track_ids]
+        nonempty = [g for g in genre_lists if g]
+        if len(nonempty) < 2:
+            diversity_score = None
+        else:
+            pairs = list(combinations(nonempty, 2))
+            distances = [_jaccard_distance(a, b) for a, b in pairs]
+            diversity_score = round(sum(distances) / len(distances), 4)
+
+        return JsonResponse({
+            'total_recommended': total_recommended,
+            'avg_popularity': round(avg_pop),
+            'novel_track_rate': novel_track_rate,
+            'hidden_gem_rate': hidden_gem_rate,
+            'gem_total': gem_total,
+            'gem_liked': gem_liked,
+            'gem_disliked': gem_disliked,
+            'gem_acceptance_rate': gem_acceptance_rate,
+            'top_genres': top_genres,
+            'top_genres_pct': top_genres_pct,
+            'improvement_story': improvement_story,
+            'diversity_score': diversity_score,
+        })
+    except Exception as e:
+        logger.error(f"Error getting recommendation metrics: {str(e)}")
+        return JsonResponse({'error': 'Failed to get recommendation metrics'}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_recommendation_trend(request):
+    """
+    Return rolling 7-day like-rate trend data for the authenticated user.
+
+    For each distinct DailyGem date, compute like-rate across the 7-day window
+    ending on that date. Returns {'data': []} with a message when fewer than 2
+    dates exist (D-03, D-08).
+    """
+    try:
+        user = request.user
+        gems = list(
+            DailyGem.objects.filter(user=user)
+            .order_by('date')
+            .values('date', 'was_liked')
+        )
+        dates = sorted(set(g['date'] for g in gems))
+        data_points = []
+        for d in dates:
+            window_start = d - timedelta(days=6)
+            window = [g for g in gems if window_start <= g['date'] <= d]
+            liked = sum(1 for g in window if g['was_liked'] is True)
+            total = len(window)
+            like_rate = round((liked / total) * 100, 1) if total > 0 else 0.0
+            data_points.append({'date': str(d), 'like_rate': like_rate})
+        if len(data_points) < 2:
+            return JsonResponse({'data': [], 'message': 'Not enough data'})
+        return JsonResponse({'data': data_points})
+    except Exception as e:
+        logger.error(f"Error getting recommendation trend: {str(e)}")
+        return JsonResponse({'error': 'Failed to get recommendation trend'}, status=500)
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
