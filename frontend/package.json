@@ -18,6 +18,7 @@
     "react-dom": "^18",
     "react-h5-audio-player": "^3.9.3",
     "react-switch": "^7.0.0",
+    "recharts": "^3.8.1",
     "sass": "^1.80.5",
     "shadcn-ui": "^0.9.2"
   },
