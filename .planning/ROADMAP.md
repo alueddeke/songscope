@@ -123,7 +123,7 @@ Plans:
 Plans:
 - [x] 05-01-PLAN.md — Wave 1: Backend security surgery — rotate SECRET_KEY via decouple + uncomment CsrfViewMiddleware + delete CsrfExemptSessionAuthentication dead code
 - [x] 05-02-PLAN.md — Wave 1: Frontend credential exposure removal — strip env block + dotenv import from next.config.mjs
-- [ ] 05-03-PLAN.md — Wave 2: Create .env.example (root + backend/) + run full regression test suite + record manual smoke-test checklist
+- [x] 05-03-PLAN.md — Wave 2: Create .env.example (root + backend/) + run full regression test suite + record manual smoke-test checklist
 
 ---
 
