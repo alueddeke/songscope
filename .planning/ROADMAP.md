@@ -98,7 +98,7 @@ Plans:
 
 Plans:
 - [x] 04-01-PLAN.md — Wave 0: install recharts + scaffold backend/tests/test_metrics.py with failing stubs
-- [ ] 04-02-PLAN.md — Backend metrics endpoints (/api/recommendation-metrics/ + /api/recommendation-trend/) with Jaccard helper
+- [x] 04-02-PLAN.md — Backend metrics endpoints (/api/recommendation-metrics/ + /api/recommendation-trend/) with Jaccard helper
 - [ ] 04-03-PLAN.md — Frontend chart components (LikeTrendChart, TasteProfileChart, ImprovementStory, DiversityScore) + wire MetricsStrip into profile/page.tsx
 - [ ] 04-04-PLAN.md — Documentation: CONCEPTS.md (ML/DS algorithm reference) + SYSTEM_DESIGN.md (Mermaid architecture diagram)
 
