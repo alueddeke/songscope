@@ -37,39 +37,21 @@ export default function Recommendation() {
         setLoading(true);
       }
       setError(null);
-      
-      console.log("Fetching recommendations from API...", forceFresh ? "(fresh)" : "");
-      console.log("Backend URL:", process.env.NEXT_PUBLIC_BACKEND_URL);
-      
-      // First check if we're authenticated
-      try {
-        console.log("Current cookies:", document.cookie);
-        const authCheck = await get<{authenticated: boolean}>("/api/check-auth/");
-        console.log("Auth check:", authCheck);
-      } catch (authError) {
-        console.error("Auth check failed:", authError);
-      }
-      
-      // Add force_fresh parameter if requested
+
       const url = forceFresh ? "/api/recommendations/?force_fresh=true" : "/api/recommendations/";
       const response = await get<RecommendationsResponse>(url);
-      
-      console.log("Recommendations response:", response);
-      
+
       if (!response.recommendations || !Array.isArray(response.recommendations)) {
         throw new Error("Invalid response format from API");
       }
 
-      // Set recommendations and reset to first track
       setRecommendations(response.recommendations);
       setCurrentIndex(0);
-      
-      console.log("Recommendations loaded:", response.recommendations.length);
-      
+
       if (response.recommendations.length === 0) {
         setError("No recommendations available");
       }
-      
+
       setLoading(false);
       setIsRefreshing(false);
     } catch (err) {

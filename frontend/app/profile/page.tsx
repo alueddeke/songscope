@@ -29,16 +29,15 @@ async function getUserName() {
     cache: 'no-store'
   })
 
+  if (response.status === 401 || response.status === 403) {
+    redirect('/')
+  }
   if (!response.ok) {
-    // Handle various error cases
-    if (response.status > 300) {
-      redirect('/') // Token not found, redirect to login
-    }
     throw new Error('Failed to fetch user data')
   }
 
   const data = await response.json()
-  return data.user_name.display_name
+  return data.user_name?.display_name ?? 'there'
 }
 
 const UserProfile = async () => {

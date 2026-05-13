@@ -8,29 +8,30 @@ interface AddToLikedProps {
 
 export function AddToLiked(props: AddToLikedProps) {
   const track_id = props.id;
-  const [liked, setLiked] = useState<Boolean>(false)
+  const [liked, setLiked] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
 
   async function addToSpotify() {
-    console.log("adding to spotify");
-    setLiked(true)
+    if (loading || liked) return;
+    setLoading(true);
     try {
-      const response: Response = await post(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/add-track-to-liked/`,
-        { track_id: track_id }
-      );
-      console.log(response);
-    } catch {
-      console.log("error adding to liked");
+      await post<{ message: string }>("/api/add-track-to-liked/", { track_id });
+      setLiked(true);
+    } catch (err) {
+      console.error("Failed to add track to liked:", err);
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
     <button
       onClick={addToSpotify}
-      className="bg-black border border-white rounded-full flex gap-2 items-center justify-center flex-1 text-black py-2 hover:scale-105  transition-transform duration-200"
+      disabled={loading || liked}
+      className="bg-black border border-white rounded-full flex gap-2 items-center justify-center flex-1 text-black py-2 hover:scale-105 transition-transform duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      <img className="w-5" src={liked ? "/icons/like-icon-liked.svg":"/icons/like-icon-like.svg" }/> 
-      <span className="text-white">Add to Liked</span>
+      <img className="w-5" src={liked ? "/icons/like-icon-liked.svg" : "/icons/like-icon-like.svg"} />
+      <span className="text-white">{loading ? "Adding..." : "Add to Liked"}</span>
     </button>
   );
 }

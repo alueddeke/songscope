@@ -19,6 +19,7 @@ export const feedbackConfig = {
     selectedColor: "text-white bg-green",
     iconColor: "text-white",
     selectedIconColor: "text-green-700",
+    selectedRingColor: "ring-green-600",
   },
   DISLIKE: {
     icon: ThumbsDown,
@@ -27,14 +28,16 @@ export const feedbackConfig = {
     selectedColor: "bg-red-700 border-white text-white",
     iconColor: "text-white",
     selectedIconColor: "text-white",
+    selectedRingColor: "ring-red-600",
   },
   SKIP: {
     icon: Forward,
     label: "Skip this song",
     hoverColor: "hover:bg-gray-100",
-    selectedColor: "", // Skip doesn't have a selected state
+    selectedColor: "",
     iconColor: "text-gray-600",
     selectedIconColor: "text-gray-600",
+    selectedRingColor: "ring-gray-600",
   },
   SAVE: {
     icon: BookmarkPlus,
@@ -43,6 +46,7 @@ export const feedbackConfig = {
     selectedColor: "bg-blue-100",
     iconColor: "text-blue-600",
     selectedIconColor: "text-blue-700",
+    selectedRingColor: "ring-blue-600",
   },
 } as const;
 
@@ -99,7 +103,7 @@ export function FeedbackButton({
         ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
         ${isLoading ? "animate-pulse" : ""}
         ${isSelected ? "ring-2 ring-offset-2 ring-offset-white" : ""}
-        ${isSelected ? `ring-${config.iconColor.split("-")[1]}-600` : ""}
+        ${isSelected ? config.selectedRingColor : ""}
       `}
       aria-label={config.label}
       aria-pressed={isSelected}
