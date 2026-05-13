@@ -33,7 +33,7 @@ CSRF_COOKIE_SECURE = False
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ["localhost", "localhost:8000"]
+ALLOWED_HOSTS = ["localhost", "localhost:8000", "127.0.0.1", "127.0.0.1:8000"]
 
 
 # Application definition

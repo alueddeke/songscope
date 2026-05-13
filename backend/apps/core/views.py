@@ -322,15 +322,18 @@ def get_track_recommendations(request):
 
         # Log recommendations
         for track in processed_tracks:
-            track_obj = Track.objects.get_or_create(
-                spotify_id=track['id'],
-                defaults={
-                    'name': track.get('name', ''),
-                    'artist': track.get('artist', ''),
-                    'album': track.get('album', ''),
-                }
-            )[0]
-            RecommendationLog.log_recommendation(request.user, track_obj, source=track.get('source', ''))
+            try:
+                track_obj = Track.objects.get_or_create(
+                    spotify_id=track['id'],
+                    defaults={
+                        'name': track.get('name', ''),
+                        'artist': track.get('artist', ''),
+                        'album': track.get('album', ''),
+                    }
+                )[0]
+                RecommendationLog.log_recommendation(request.user, track_obj, source=track.get('source', ''))
+            except Exception as log_err:
+                logger.error(f"Error logging recommendation for track {track.get('id')}: {log_err}")
 
         return JsonResponse({'recommendations': processed_tracks})
 

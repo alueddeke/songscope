@@ -418,8 +418,8 @@ class HybridRecommendationEngine:
             if not self._check_rate_limit():
                 return
             
-            # Get more recent tracks for better patterns
-            recent_tracks = sp.current_user_recently_played(limit=100)
+            # Get more recent tracks for better patterns (Spotify max is 50)
+            recent_tracks = sp.current_user_recently_played(limit=50)
             
             # Analyze patterns by time of day
             patterns = {'morning': [], 'afternoon': [], 'evening': [], 'night': []}
