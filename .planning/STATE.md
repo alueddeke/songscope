@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-05-13T15:43:54.339Z"
 last_activity: 2026-05-13
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -24,41 +24,49 @@ _Reconstructed: 2026-05-07 (no prior STATE.md found)_
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Not started (roadmap created, ready for Phase 6)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-13 — Milestone v1.1 started
+Status: Roadmap complete — awaiting /gsd-plan-phase 6
+Last activity: 2026-05-13 — Milestone v1.1 roadmap created (4 phases, 12 requirements)
 
 ## Progress
 
-`[████░░░░░░] 50%` — Phase 2 complete (3/3 plans, verification passed 17/17)
+`[██████████] v1.0 complete` — Phases 1–5 done
+`[░░░░░░░░░░] v1.1: 0%` — Phase 6–9 not started
 
 ## Recent Decisions
 
 | Decision | Status |
 |----------|--------|
-| Content-based filtering as ML approach | Pending |
-| Compound metric (listened + liked) | Pending |
-| Filter known songs before ML work | Pending |
-| Keep original dataset for cold-start priors | Pending |
+| Content-based filtering as ML approach | Validated (Phase 2) |
+| Compound metric (liked OR saved) — OR not AND | Validated — OR chosen; AND too sparse for daily-gem single-user app |
+| Filter known songs before ML work | Validated (Phase 1) |
+| Deterministic explanation template — no OpenAI | Validated — zero cost, zero latency, formula-synchronized by construction |
+| `score_breakdown` as JSONField + `score_total` as flat FloatField | Validated — one migration, open schema, queryable aggregate |
+| taste_vector_snapshot at recommendation time | Validated — required for offline evaluation; captures model state at pick time |
 
-## Active Requirements (from PROJECT.md)
+## Active Requirements (v1.1)
 
-1. Filter already-known songs from recommendations
-2. ML-backed recommendation scoring (replace rule-based heuristics)
-3. Wire AI feedback weights into recommendation ranking
-4. Compound success metric tracking
-5. Per-recommendation outcome logging
-6. Fix broken test suite
-7. Security hardening (SECRET_KEY, CSRF, client secret exposure)
-8. Explore hit-prediction dataset viability
-9. Research current Spotify endpoints
+1. SCHEMA-01: DailyGem schema migration (score_breakdown, score_total, taste_vector_snapshot) → Phase 6
+2. METRIC-01: DailyGem.was_saved field → Phase 6
+3. SCHEMA-02: Engine writes score_breakdown at creation → Phase 7
+4. SCHEMA-03: taste_vector_snapshot captured at recommendation time → Phase 7
+5. SCHEMA-04: All 3 cached-branch return sites read score_breakdown from DB → Phase 7
+6. EXPLAIN-01: _build_gem_explanation pure function (no OpenAI) → Phase 7
+7. EXPLAIN-02: DailyGem.explanation populated at creation → Phase 7
+8. METRIC-02: compound_hit_rate in /api/recommendation-metrics/ → Phase 7
+9. EXPLAIN-03: Frontend 3-bar score breakdown component → Phase 8
+10. METRIC-03: MetricsStrip shows compound hit rate → Phase 8
+11. DOCS-01: CONCEPTS.md updated → Phase 9
+12. DOCS-02: SYSTEM_DESIGN.md updated → Phase 9
 
 ## Blockers / Concerns
 
-- **Security:** Hardcoded SECRET_KEY committed to git, Spotify client secret in browser bundle, CSRF disabled (deferred to post-ML milestone)
+- None at planning stage. Research confidence: HIGH. All patterns confirmed from direct codebase inspection. No new dependencies required.
+- **Watch:** Cached-branch trap — get_daily_gem has 3 return sites (lines ~1048/1110/1126); all must be fixed in Phase 7 or score_breakdown silently returns {} on cached responses.
+- **Watch:** Two-path compound metric — was_saved must be wired in add_track_to_liked, NOT submit_feedback. These are independent code paths.
 
-## Phase 1 Resolved
+## Phase 1–5 Resolved (v1.0)
 
 - ✓ `Count` import fix + `update_weights` arity crash fixed
 - ✓ `RecommendationLog.liked` written on LIKE/DISLIKE/unlike
@@ -67,9 +75,15 @@ Last activity: 2026-05-13 — Milestone v1.1 started
 - ✓ Top-artist name filter replaced by track-level exclusion
 - ✓ `artist_related_artists` added as 5th candidate strategy
 - ✓ Test suite fixed (31 phase-relevant tests collected, all pass)
+- ✓ Genre taste vector + cosine similarity scorer (Phase 2)
+- ✓ Online taste vector update on like/dislike (Phase 3)
+- ✓ Thompson Sampling bandit over 5 candidate sources (Phase 3)
+- ✓ SECRET_KEY rotated to env var via python-decouple (Phase 5)
+- ✓ Spotify CLIENT_SECRET removed from frontend bundle (Phase 5)
+- ✓ CsrfViewMiddleware re-enabled (Phase 5)
 
 ## Session Continuity
 
-Last session: 2026-05-12T15:00:00.000Z
-Stopped at: MILESTONE COMPLETE. All 4 phases done. CONCEPTS.md + SYSTEM_DESIGN.md live on main. Human checkpoint approved.
-Resume file: N/A — milestone v1.0 complete
+Last session: 2026-05-13
+Stopped at: Milestone v1.1 roadmap created. 4 phases (6–9), 12 requirements, 100% coverage. Ready for planning.
+Resume file: N/A — run /gsd-plan-phase 6 to begin

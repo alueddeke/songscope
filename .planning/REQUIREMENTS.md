@@ -51,19 +51,17 @@ _Created: 2026-05-13_
 
 ## Traceability
 
-_Filled by roadmapper._
-
 | REQ-ID | Phase |
 |--------|-------|
-| SCHEMA-01 | — |
-| SCHEMA-02 | — |
-| SCHEMA-03 | — |
-| SCHEMA-04 | — |
-| EXPLAIN-01 | — |
-| EXPLAIN-02 | — |
-| EXPLAIN-03 | — |
-| METRIC-01 | — |
-| METRIC-02 | — |
-| METRIC-03 | — |
-| DOCS-01 | — |
-| DOCS-02 | — |
+| SCHEMA-01 | Phase 6 |
+| SCHEMA-02 | Phase 7 |
+| SCHEMA-03 | Phase 7 |
+| SCHEMA-04 | Phase 7 |
+| EXPLAIN-01 | Phase 7 |
+| EXPLAIN-02 | Phase 7 |
+| EXPLAIN-03 | Phase 8 |
+| METRIC-01 | Phase 6 |
+| METRIC-02 | Phase 7 |
+| METRIC-03 | Phase 8 |
+| DOCS-01 | Phase 9 |
+| DOCS-02 | Phase 9 |

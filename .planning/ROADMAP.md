@@ -150,3 +150,93 @@ Tracked in PROJECT.md Active requirements for future milestone.
 ---
 
 _Last updated: 2026-05-12_
+
+---
+
+## Milestone: v1.1 — Explainability + Feedback Loop Closure
+
+**Goal:** Surface why each daily gem was chosen (score breakdown + explanation text) and close the feedback loop with a measurable compound success metric (hit = liked OR saved).
+
+**Success state:** Every gem card shows what drove the pick, explanation text is tied to the actual score formula, and the metrics strip reports a compound hit rate backed by real outcome data.
+
+---
+
+## Phases
+
+- [ ] **Phase 6: Schema Migration** — Add all new DailyGem fields in a single migration (score_breakdown, score_total, was_saved, taste_vector_snapshot)
+- [ ] **Phase 7: Backend Wiring** — Write score fields at recommendation time, fix all three cached-branch return sites, wire was_saved, expose compound hit rate
+- [ ] **Phase 8: Frontend Score Breakdown** — Render the three score bars and compound hit rate in the UI
+- [ ] **Phase 9: Documentation Sync** — Update CONCEPTS.md and SYSTEM_DESIGN.md to reflect all v1.1 changes
+
+---
+
+## Phase Details
+
+### Phase 6: Schema Migration
+**Goal**: The database has all fields required for score persistence, compound success tracking, and taste snapshot logging
+**Depends on**: Phase 5 (v1.0 complete)
+**Requirements**: SCHEMA-01, METRIC-01
+**Success Criteria** (what must be TRUE):
+  1. `DailyGem` table contains `score_breakdown` (JSONField), `score_total` (FloatField nullable), `was_saved` (BooleanField nullable), and `taste_vector_snapshot` (JSONField nullable) columns after running `migrate`
+  2. All existing `DailyGem` rows survive migration with no data loss — new columns default to `{}` / `null` as designed
+  3. Django ORM can write and read each new field in the shell without error
+**Plans**: TBD
+
+### Phase 7: Backend Wiring
+**Goal**: The API returns populated score breakdowns and explanation text for every gem request, was_saved is recorded on library saves, and compound hit rate is available in the metrics endpoint
+**Depends on**: Phase 6
+**Requirements**: SCHEMA-02, SCHEMA-03, SCHEMA-04, EXPLAIN-01, EXPLAIN-02, METRIC-02
+**Success Criteria** (what must be TRUE):
+  1. Calling `GET /api/daily-gem/` on a fresh day returns a non-empty `score_breakdown` dict and a human-readable `explanation` string derived from the dominant score component — no OpenAI call involved
+  2. Calling `GET /api/daily-gem/` a second time the same day (cached branch) returns the same non-empty `score_breakdown` and `explanation` read from the DB — not hardcoded `{}`
+  3. Clicking the heart/save button triggers `DailyGem.was_saved = True` in the DB; a failure to write is non-fatal and does not 500 the save action
+  4. `GET /api/recommendation-metrics/` returns a `compound_hit_rate` key computed as `(was_liked OR was_saved) / total_gems`
+**Plans**: TBD
+
+### Phase 8: Frontend Score Breakdown
+**Goal**: Users can see what drove their daily gem pick directly on the gem card, and the metrics strip shows compound hit rate
+**Depends on**: Phase 7
+**Requirements**: EXPLAIN-03, METRIC-03
+**Success Criteria** (what must be TRUE):
+  1. The gem card displays three labeled score bars (Genre Match, Novelty, Feedback Influence) with percentage values rounded to the nearest 5%, rendered from `score_breakdown` API data
+  2. Gems with no score data (pre-migration rows) display a graceful empty state — no crash, no blank bars
+  3. The MetricsStrip shows a "Hit Rate" tile sourced from `compound_hit_rate` alongside the existing gem acceptance rate
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 9: Documentation Sync
+**Goal**: CONCEPTS.md and SYSTEM_DESIGN.md accurately reflect every v1.1 change so the codebase remains interview-ready
+**Depends on**: Phase 7
+**Requirements**: DOCS-01, DOCS-02
+**Success Criteria** (what must be TRUE):
+  1. CONCEPTS.md contains: compound hit rate definition with OR-semantics rationale, `taste_vector_snapshot` purpose (offline evaluation), score breakdown persistence rationale, and why the explanation is deterministic (not OpenAI)
+  2. SYSTEM_DESIGN.md contains: updated `DailyGem` field table with all v1.1 columns, `_build_gem_explanation` data flow description, `add_track_to_liked` side-effect note for `was_saved`, and Score Breakdown API contract
+**Plans**: TBD
+
+---
+
+## Progress Table (v1.1)
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 6. Schema Migration | 0/? | Not started | - |
+| 7. Backend Wiring | 0/? | Not started | - |
+| 8. Frontend Score Breakdown | 0/? | Not started | - |
+| 9. Documentation Sync | 0/? | Not started | - |
+
+---
+
+## Dependency Order (v1.1)
+
+```
+Phase 6 (schema migration)
+    → Phase 7 (backend wiring)
+        → Phase 8 (frontend score breakdown)
+        → Phase 9 (documentation sync)
+```
+
+Phase 9 can begin after Phase 7 completes; it does not block Phase 8.
+
+---
+
+_Last updated: 2026-05-13_
