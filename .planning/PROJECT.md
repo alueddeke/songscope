@@ -1,5 +1,17 @@
 # SongScope
 
+## Current Milestone: v1.1 Explainability + Feedback Loop Closure
+
+**Goal:** Surface why each recommendation was chosen and close the feedback loop with a real compound success metric.
+
+**Target features:**
+- "Why this gem" score breakdown in UI (genre match %, novelty score, feedback multiplier contribution)
+- Compound success metric: binary hit = played + saved/liked
+- Per-recommendation outcome logging (was it played? saved? skipped?)
+- Explanation text tied to actual score components, not canned copy
+
+---
+
 ## What This Is
 
 SongScope is a daily music discovery app that connects to a user's Spotify account and surfaces one "hidden gem" per day — a song the user hasn't heard before but is likely to love, based on their listening patterns, taste, and real-time feedback. It is primarily a portfolio project demonstrating full-stack development, ML-backed recommendation systems, and data science skills — designed to generate substantive interview talking points.
@@ -42,14 +54,30 @@ Recommend one song per day that the user genuinely discovers — not a song they
 - ✓ `RecommendationLog.source` CharField added + migration 0006 applied — per-strategy tracking ready
 - ✓ 21 Phase 2 tests pass (taste vector, cosine scoring, source field DB persistence)
 
-### Active
+### Validated in Phases 3–5 (Feedback Learning + Security — 2026-05-12)
 
-- [ ] Feedback learning loop — online taste vector update on like/dislike
-- [ ] Multi-armed bandit over candidate sources (Thompson Sampling)
-- [ ] Compound success metric tracking: user listened AND liked/saved recommended track
+- ✓ Online taste vector update on like/dislike (Phase 3)
+- ✓ Thompson Sampling bandit over 5 candidate sources (Phase 3)
+- ✓ SECRET_KEY rotated to env var via python-decouple (Phase 5)
+- ✓ Spotify CLIENT_SECRET removed from frontend bundle (Phase 5)
+- ✓ CsrfViewMiddleware re-enabled (Phase 5)
+- ✓ OAUTHLIB_INSECURE_TRANSPORT production guard added (Phase 5 review)
+- ✓ Raw str(e) exception leaks plugged across all 14 handlers (Phase 5 review)
+
+### Active (v1.1 target)
+
+- [ ] "Why this gem" score breakdown in UI — genre match %, novelty score, feedback multiplier contribution
+- [ ] Compound success metric: binary hit = played + saved/liked
 - [ ] Per-recommendation outcome logging (was it played? saved? skipped?)
-- [ ] Security hardening (rotate SECRET_KEY, move credentials to env vars, re-enable CSRF)
-- [ ] Explore viability of original hit-prediction dataset as base weights for ML model
+- [ ] Explanation text tied to actual score components (not canned copy)
+
+### Active (future milestones)
+
+- [ ] Evaluation dashboard — learning curve, per-source win rates, A/B framework
+- [ ] Audio feature proxy — replace deprecated Spotify audio_features with AcousticBrainz/Last.fm
+- [ ] Re-wire hit-prediction dataset as cold-start priors
+- [ ] Collaborative filtering (item-item CF + hybrid blend)
+- [ ] Production deployment (Vercel + Railway/Render + Postgres)
 
 ### Out of Scope
 
@@ -95,7 +123,7 @@ Recommend one song per day that the user genuinely discovers — not a song they
 | Content-based filtering as ML approach | No multi-user base; cosine similarity on user preference vector is explainable and implementable | Implemented (Phase 2) |
 | Drop TF-IDF weighting for taste vector | Simple frequency count is sufficient for portfolio scope; TF-IDF adds complexity without meaningful gain at this scale | Validated (Phase 2) |
 | Remove audio-weight dead code | `_update_weights_from_ai_feedback` adjusted deprecated Spotify audio features — permanently inapplicable | Validated (Phase 2) |
-| Compound metric (listened + liked) | Click-through alone is a weak signal; save/like confirms genuine discovery | — Pending (Phase 3) |
+| Compound metric (listened + liked) | Click-through alone is a weak signal; save/like confirms genuine discovery | Target: v1.1 Phase 6 |
 | Keep original dataset for cold-start priors | If audio features available from alt source, base weights give a head start on taste modeling | — Deferred |
 | Filter known songs before scoring | Core UX failure; must happen before any ML improvement matters | Validated (Phase 1) |
 | SQLite for now | Portfolio scale; easy to demo; migrate to Postgres when/if multi-user | — Pending |
@@ -118,4 +146,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-07 — Phase 2 complete*
+*Last updated: 2026-05-13 — Milestone v1.0 complete; v1.1 started*
