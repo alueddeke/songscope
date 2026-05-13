@@ -1,9 +1,5 @@
 import json
-import time
-import logging
 import os
-import requests
-import numpy as np
 from django.shortcuts import redirect
 from django.conf import settings
 from django.http import JsonResponse
@@ -14,26 +10,30 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.db.models import Avg
 from django.utils import timezone
-from datetime import timedelta, date
+from datetime import timedelta  # date removed: using timezone.localdate() everywhere
 from itertools import combinations
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from requests_oauthlib import OAuth2Session
 import spotipy
 from spotipy.exceptions import SpotifyException
-from spotipy.oauth2 import SpotifyOAuth
 
-from .models import SpotifyToken, Track, UserFeedback, UserPreferences, RecommendationLog, AIFeedback, DailyGem, UserProfile
+from .models import SpotifyToken, Track, UserFeedback, RecommendationLog, AIFeedback, DailyGem, UserProfile
 from .serializers import FeedbackSubmissionSerializer, AIFeedbackSubmissionSerializer
 from apps.spotify.utils import get_spotipy_client, refresh_spotify_token
-from apps.recommendations.feature_extractor import extract_current_user_profile, get_recommendations
-from apps.recommendations.recommendation_engine import RecommendationEngine
 from apps.recommendations.hybrid_recommendation_engine import HybridRecommendationEngine
 from apps.ai.ai_feedback_service import get_feedback_interpreter, RateLimitExceeded, CostLimitExceeded
 from utils.logging_config import logger
 
 if settings.OAUTHLIB_INSECURE_TRANSPORT:
-    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+    if not settings.DEBUG:
+        import logging as _logging
+        _logging.critical(
+            "OAUTHLIB_INSECURE_TRANSPORT is enabled but DEBUG=False. "
+            "This allows plain-HTTP OAuth in production — set OAUTHLIB_INSECURE_TRANSPORT=False."
+        )
+    else:
+        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 client_id = settings.SPOTIFY_CLIENT_ID
 client_secret = settings.SPOTIFY_CLIENT_SECRET
@@ -123,13 +123,13 @@ def get_user_top_tracks(request):
         return JsonResponse({'tracks': tracks_data})
         
     except SpotifyException as e:
-        logger.error(f"Spotify API error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=e.http_status)
+        logger.error(f"Spotify API error in get_user_top_tracks: {str(e)}")
+        return JsonResponse({'error': 'Spotify API error'}, status=getattr(e, 'http_status', 502) or 502)
     except SpotifyToken.DoesNotExist:
         return JsonResponse({'error': 'Spotify token not found'}, status=404)
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.error(f"Unexpected error in get_user_top_tracks: {str(e)}", exc_info=True)
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 @login_required
 def get_user_recently_played(request):
@@ -154,13 +154,13 @@ def get_user_recently_played(request):
         return JsonResponse({'recent_tracks': tracks_data})
         
     except SpotifyException as e:
-        logger.error(f"Spotify API error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=e.http_status)
+        logger.error(f"Spotify API error in get_user_recently_played: {str(e)}")
+        return JsonResponse({'error': 'Spotify API error'}, status=getattr(e, 'http_status', 502) or 502)
     except SpotifyToken.DoesNotExist:
         return JsonResponse({'error': 'Spotify token not found'}, status=404)
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.error(f"Unexpected error in get_user_recently_played: {str(e)}", exc_info=True)
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 @login_required
 def get_user_top_artists(request):
@@ -213,13 +213,13 @@ def get_user_top_artists(request):
         })
         
     except SpotifyException as e:
-        logger.error(f"Spotify API error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=e.http_status)
+        logger.error(f"Spotify API error in get_user_top_artists: {str(e)}")
+        return JsonResponse({'error': 'Spotify API error'}, status=getattr(e, 'http_status', 502) or 502)
     except SpotifyToken.DoesNotExist:
         return JsonResponse({'error': 'Spotify token not found'}, status=404)
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.error(f"Unexpected error in get_user_top_artists: {str(e)}", exc_info=True)
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 
 @api_view(['GET'])
@@ -247,8 +247,8 @@ def check_spotify_token(request):
     except SpotifyToken.DoesNotExist:
         return JsonResponse({'valid': False, 'error': 'No Spotify token found'}, status=404)
     except Exception as e:
-        logger.error(f"Error checking Spotify token: {str(e)}")
-        return JsonResponse({'valid': False, 'error': str(e)}, status=500)
+        logger.error(f"Error checking Spotify token: {str(e)}", exc_info=True)
+        return JsonResponse({'valid': False, 'error': 'An unexpected error occurred'}, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -349,7 +349,8 @@ def check_auth(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def debug_auth(request):
-    """Debug endpoint to check authentication status"""
+    if not settings.DEBUG:
+        return JsonResponse({'error': 'Not found'}, status=404)
     return JsonResponse({
         'authenticated': request.user.is_authenticated,
         'user_id': request.user.id if request.user.is_authenticated else None,
@@ -471,7 +472,8 @@ def get_recommendation_metrics(request):
         if len(nonempty) < 2:
             diversity_score = None
         else:
-            pairs = list(combinations(nonempty, 2))
+            sample = nonempty[-50:]  # cap at 50 most recent to avoid O(n²) blowup
+            pairs = list(combinations(sample, 2))
             distances = [_jaccard_distance(a, b) for a, b in pairs]
             diversity_score = round(sum(distances) / len(distances), 4)
 
@@ -806,19 +808,22 @@ def get_user_name(request):
         
         sp = get_spotipy_client(spotify_token.access_token)
         
-        # Single method call instead of raw request
-        user_name = sp.me()
-        
-        return JsonResponse({'user_name': user_name})
-        
+        me = sp.me()
+        return JsonResponse({
+            'user_name': {
+                'display_name': me.get('display_name', ''),
+                'images': me.get('images', []),
+            }
+        })
+
     except SpotifyException as e:
-        logger.error(f"Spotify API error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=e.http_status)
+        logger.error(f"Spotify API error in get_user_name: {str(e)}")
+        return JsonResponse({'error': 'Spotify API error'}, status=getattr(e, 'http_status', 502) or 502)
     except SpotifyToken.DoesNotExist:
         return JsonResponse({'error': 'Spotify token not found'}, status=404)
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.error(f"Unexpected error in get_user_name: {str(e)}", exc_info=True)
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
     
 
 @api_view(['POST'])
@@ -826,8 +831,7 @@ def get_user_name(request):
 def add_track_to_liked(request):
     """Add a track to the user's Spotify liked songs library."""
     try:
-        payload = json.loads(request.body.decode('utf-8'))
-        track_id = payload.get("track_id")
+        track_id = request.data.get("track_id")
         if not track_id:
             return JsonResponse({'error': 'track_id is required'}, status=400)
 
@@ -841,13 +845,13 @@ def add_track_to_liked(request):
         return JsonResponse({'message': "all good"})
 
     except SpotifyException as e:
-        logger.error(f"Spotify API error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=e.http_status)
+        logger.error(f"Spotify API error in add_track_to_liked: {str(e)}")
+        return JsonResponse({'error': 'Spotify API error'}, status=getattr(e, 'http_status', 502) or 502)
     except SpotifyToken.DoesNotExist:
         return JsonResponse({'error': 'Spotify token not found'}, status=404)
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.error(f"Unexpected error in add_track_to_liked: {str(e)}", exc_info=True)
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 @login_required
 def get_artist_details(request, artist_id):
@@ -1008,13 +1012,13 @@ def get_artist_details(request, artist_id):
         return JsonResponse(artist_data)
 
     except SpotifyException as e:
-        logger.error(f"Spotify API error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=e.http_status)
+        logger.error(f"Spotify API error in get_artist_details: {str(e)}")
+        return JsonResponse({'error': 'Spotify API error'}, status=getattr(e, 'http_status', 502) or 502)
     except SpotifyToken.DoesNotExist:
         return JsonResponse({'error': 'Spotify token not found'}, status=404)
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+        logger.error(f"Unexpected error in get_artist_details: {str(e)}", exc_info=True)
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 
 @api_view(['GET'])
@@ -1034,7 +1038,7 @@ def get_daily_gem(request):
     receive 403 (DRF default), not 404. (T-03-11 mitigation)
     """
     try:
-        today = date.today()
+        today = timezone.localdate()
 
         # --- Cached branch ---------------------------------------------------
         try:

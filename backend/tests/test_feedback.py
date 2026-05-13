@@ -19,7 +19,7 @@ class TestRecommendationLogLikedField(TestCase):
     def setUp(self):
         self.user = User.objects.create_user('feeduser', password='pw')
         self.track = Track.objects.create(
-            spotify_id='trk_feedback_1',
+            spotify_id='A' * 22,
             name='Feedback Test Track',
             artist='Artist',
             album='Album',
@@ -82,7 +82,7 @@ class TestDailyGemWasLikedSync(TestCase):
         from apps.core.models import DailyGem
         self.user = User.objects.create_user('gemuser', password='pw')
         self.track = Track.objects.create(
-            spotify_id='trk_gem_sync_1',
+            spotify_id='B' * 22,
             name='Gem Track',
             artist='Artist',
             album='Album',

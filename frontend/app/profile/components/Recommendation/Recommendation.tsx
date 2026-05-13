@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { AudioPlayer } from "../AudioPlayer/AudioPlayer";
+import { useEffect, useRef, useState } from "react";
 import { AddToLiked } from "../AddToLiked/AddToLiked";
 import FeedbackButtonGroup from "../Feedback/FeedbackButtonGroup";
 import AIFeedbackInput from "../Feedback/AIFeedbackInput";
@@ -26,7 +25,7 @@ export default function Recommendation() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [cacheSize, setCacheSize] = useState<number>(0);
+  const feedbackRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch recommendations function
   const fetchRecommendations = async (forceFresh = false) => {
@@ -81,10 +80,12 @@ export default function Recommendation() {
     }
   };
 
-  // Fetch recommendations when the component mounts
   useEffect(() => {
     fetchRecommendations();
-  }, []); // Only run once on mount
+    return () => {
+      if (feedbackRefreshTimer.current) clearTimeout(feedbackRefreshTimer.current);
+    };
+  }, []);
 
   // Refresh recommendations function
   const refreshRecommendations = () => {
@@ -207,16 +208,6 @@ export default function Recommendation() {
           <h4 className="text-xl text-bold text-white">{currentTrack.album}</h4>
         </div>
 
-        {/* <div className="flex flex-col gap-2 p-2">
-          <span className="text-white font-light text-sm">Preview</span>
-          {currentTrack.preview_url ? (
-            <AudioPlayer src={currentTrack.preview_url} />
-          ) : (
-            <div className="text-gray-400 text-sm">No preview available</div>
-          )}
-        </div> */}
-
-
         {/* Removed filter toggle - now just shows recommendations */}
 
 
@@ -240,12 +231,6 @@ export default function Recommendation() {
           <FeedbackButtonGroup trackId={currentTrack.id} onTrackRemoved={handleTrackRemoved} />
 
           <div className="flex gap-4 items-center">
-            {/* Cache Status */}
-            {cacheSize > 0 && (
-              <div className="text-green text-sm font-medium">
-                Cache: {cacheSize}/50 tracks
-              </div>
-            )}
             {/* Refresh Button */}
             <button
               onClick={refreshRecommendations}
@@ -307,8 +292,7 @@ export default function Recommendation() {
           <AIFeedbackInput 
             trackId={currentTrack.id} 
             onFeedbackSubmitted={() => {
-              // Optionally refresh recommendations after AI feedback
-              setTimeout(() => {
+              feedbackRefreshTimer.current = setTimeout(() => {
                 refreshRecommendations();
               }, 2000);
             }}

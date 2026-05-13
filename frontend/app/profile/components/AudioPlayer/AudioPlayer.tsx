@@ -9,9 +9,6 @@ interface AudioPlayerProps {
 
 export function AudioPlayer(props: AudioPlayerProps) {
   const src = props.src;
-  if (!src){
-    return <h1>loading...</h1>
-  }
   return (
     <H5AudioPlayer
       

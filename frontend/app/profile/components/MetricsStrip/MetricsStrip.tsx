@@ -29,14 +29,16 @@ export default function MetricsStrip() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchFailed, setFetchFailed] = useState(false);
 
   const fetchMetrics = async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true);
     try {
       const data = await get<Metrics>("/api/recommendation-metrics/");
       setMetrics(data);
+      setFetchFailed(false);
     } catch {
-      // silently ignore — strip is informational
+      setFetchFailed(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -47,7 +49,9 @@ export default function MetricsStrip() {
     fetchMetrics();
   }, []);
 
-  if (loading || !metrics || metrics.message) return null;
+  if (loading) return null;
+  if (fetchFailed) return <p className="text-gray-600 text-xs px-4 py-6">Stats unavailable</p>;
+  if (!metrics || metrics.message) return null;
 
   const acceptance =
     metrics.gem_acceptance_rate !== null

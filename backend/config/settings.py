@@ -12,9 +12,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 from decouple import config
 
-# Set this to True for local development, False for production
-OAUTHLIB_INSECURE_TRANSPORT = config('OAUTHLIB_INSECURE_TRANSPORT', 'False').lower() == 'true'
-
+SECRET_KEY = config('SECRET_KEY')
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 SPOTIFY_CLIENT_ID = config('SPOTIFY_CLIENT_ID')
 SPOTIFY_CLIENT_SECRET = config('SPOTIFY_CLIENT_SECRET')
@@ -26,14 +25,11 @@ OPENAI_API_KEY = config('OPENAI_API_KEY', default=None)
 # Frontend URL
 FRONTEND_URL = config('FRONTEND_URL')
 
-CSRF_TRUSTED_ORIGINS = ['http://localhost:3000']
-CSRF_COOKIE_SECURE = False
+# Clamp to False in production regardless of .env value
+_raw_insecure = config('OAUTHLIB_INSECURE_TRANSPORT', 'False').lower() == 'true'
+OAUTHLIB_INSECURE_TRANSPORT = _raw_insecure and DEBUG
 
-
-SECRET_KEY = config('SECRET_KEY')
-DEBUG = config('DEBUG', default=False, cast=bool)
-
-ALLOWED_HOSTS = ["localhost", "localhost:8000", "127.0.0.1", "127.0.0.1:8000"]
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -95,19 +91,19 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SECURE = False  # Set to True in production with HTTPS
 SESSION_COOKIE_HTTPONLY = True
 
-# LOGGING = {
-#     'version': 1,
-#     'disable_existing_loggers': False,
-#     'handlers': {
-#         'console': {
-#             'class': 'logging.StreamHandler',
-#         },
-#     },
-#     'root': {
-#         'handlers': ['console'],
-#         'level': 'INFO',
-#     },
-# }
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING' if not DEBUG else 'INFO',
+    },
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases

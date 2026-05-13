@@ -62,7 +62,7 @@ export default function LikeTrendChart() {
         <XAxis
           dataKey="date"
           tickFormatter={(d: string) =>
-            new Date(d).toLocaleDateString("en-US", {
+            new Date(d + "T00:00:00").toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
             })

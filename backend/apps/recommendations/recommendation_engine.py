@@ -30,10 +30,6 @@ class RecommendationEngine:
         except Exception as e:
             logger.error(f"Error in get_personalized_recommendations: {str(e)}")
             return []
-            
-        except Exception as e:
-            logger.error(f"Error in get_personalized_recommendations: {str(e)}")
-            return []
     
     def _calculate_targets(self, feedback_queryset) -> Dict[str, float]:
         """Calculate average features from feedback"""

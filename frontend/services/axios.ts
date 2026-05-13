@@ -60,16 +60,9 @@ export async function get<T>(url: string): Promise<T> {
 }
 
 export async function post<T>(url: string, data: unknown): Promise<T> {
-  try {
-    const client = getClient();
-    const response = await client.post<T>(url, data);
-    return response.data;
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      throw new Error(error.response?.data?.error || "Failed to submit data");
-    }
-    throw error;
-  }
+  const client = getClient();
+  const response = await client.post<T>(url, data);
+  return response.data;
 }
 
 export async function fetchCsrfToken(): Promise<void> {

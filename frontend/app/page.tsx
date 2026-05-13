@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 export default function Home() {
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000';
   return (
     <main className="bg-stone-950 h-screen max-w-[1300px] flex items-center justify-around p-4 gap-8 text-white mx-auto">
       <section className="p-8 w-[50%] flex justify-center">

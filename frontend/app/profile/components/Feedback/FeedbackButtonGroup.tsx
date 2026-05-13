@@ -6,7 +6,7 @@ import {
   SelectableFeedbackType,
 } from "./FeedbackButton";
 import { post, get } from "@/services/axios";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 interface FeedbackResponse {
   status: string;
@@ -28,12 +28,6 @@ export default function FeedbackButtonGroup({ trackId, onTrackRemoved }: Feedbac
   const [selectedFeedback, setSelectedFeedback] =
     useState<SelectableFeedbackType | null>(null);
 
-  useEffect(() => {
-    setSelectedFeedback(null);
-    // Check if user has already liked this track
-    checkInitialLikeState();
-  }, [trackId]);
-
   const [status, setStatus] = useState<FeedbackStatus>({
     loading: false,
     error: null,
@@ -42,7 +36,7 @@ export default function FeedbackButtonGroup({ trackId, onTrackRemoved }: Feedbac
 
   const [notification, setNotification] = useState<string | null>(null);
 
-  const checkInitialLikeState = async () => {
+  const checkInitialLikeState = useCallback(async () => {
     try {
       const response = await get<{liked: boolean}>(`/api/check-track-feedback/${trackId}/`);
       if (response.liked) {
@@ -50,9 +44,13 @@ export default function FeedbackButtonGroup({ trackId, onTrackRemoved }: Feedbac
       }
     } catch (error) {
       console.error("Error checking initial like state:", error);
-      // Don't show error to user, just assume not liked
     }
-  };
+  }, [trackId]);
+
+  useEffect(() => {
+    setSelectedFeedback(null);
+    checkInitialLikeState();
+  }, [trackId, checkInitialLikeState]);
 
   const handleSubmit = async (feedbackType: FeedbackType) => {
     setStatus({ loading: true, error: null, success: false });

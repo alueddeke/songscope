@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp } from 'lucide-react';
 import { get } from '@/services/axios';
-import ArtistExpandedDetails from './ArtistExpandedDetails';
+import ArtistExpandedDetails, { ArtistDetailsData } from './ArtistExpandedDetails';
 
 interface Artist {
   id: string;
@@ -19,8 +19,10 @@ interface TopArtistsResponse {
   total_count: number;
 }
 
+type TimeRange = '4 weeks' | '6 months' | 'year';
+
 interface TopArtistsProps {
-  timeRange?: string;
+  timeRange?: TimeRange;
 }
 
 const TIME_RANGE_LABELS = {
@@ -40,12 +42,12 @@ const getPopularityColor = (popularity: number): string => {
   return 'text-red-400';
 };
 
-export default function TopArtists({ timeRange = '4 weeks' }: TopArtistsProps) {
+export default function TopArtists({ timeRange = '4 weeks' as TimeRange }: TopArtistsProps) {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedArtistId, setExpandedArtistId] = useState<string | null>(null);
-  const [expandedArtistData, setExpandedArtistData] = useState<any>(null);
+  const [expandedArtistData, setExpandedArtistData] = useState<ArtistDetailsData | null>(null);
   const [loadingArtistDetails, setLoadingArtistDetails] = useState(false);
 
   useEffect(() => {

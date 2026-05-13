@@ -44,7 +44,11 @@ class UserProfileSerializer(serializers.Serializer):
 
 
 class FeedbackSubmissionSerializer(serializers.Serializer):
-    track_id = serializers.CharField(max_length=255)
+    track_id = serializers.RegexField(
+        regex=r'^[A-Za-z0-9]{22}$',
+        max_length=22,
+        error_messages={'invalid': 'Invalid Spotify track ID format'},
+    )
     feedback_type = serializers.ChoiceField(choices=[
         ('LIKE', 'Like'),
         ('DISLIKE', 'Dislike'),

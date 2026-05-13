@@ -21,7 +21,7 @@ interface Album {
   total_tracks: number;
 }
 
-interface ArtistDetailsData {
+export interface ArtistDetailsData {
   id: string;
   name: string;
   images: Array<{ url: string }>;
