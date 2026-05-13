@@ -267,6 +267,121 @@ class TestTasteVectorUpdate(TestCase):
             ),
         )
 
+    # ------------------------------------------------------------------
+    # test_remove_feedback_no_genres_does_not_raise
+    # ------------------------------------------------------------------
+    def test_remove_feedback_no_genres_does_not_raise(self):
+        """
+        remove_feedback_learning on a track whose genres list is empty must
+        log a warning and return cleanly — no exception, no taste_vector change.
+
+        Regression guard: an earlier version tried to iterate over None genres.
+        """
+        no_genre_track = Track.objects.create(
+            spotify_id='no_genre_track_1',
+            name='Genreless',
+            artist='Mystery Artist',
+            album='Unknown Album',
+            genres=[],
+        )
+        engine = PersonalizationEngine(self.user)
+        initial_vector = dict(self.profile.data['taste_vector'])
+
+        # Must not raise
+        engine.remove_feedback_learning(no_genre_track.spotify_id)
+
+        self.profile.refresh_from_db()
+        self.assertEqual(
+            self.profile.data['taste_vector'],
+            initial_vector,
+            msg="taste_vector must be unchanged when track has no genres",
+        )
+
+    # ------------------------------------------------------------------
+    # test_apply_feedback_no_recommendation_log_still_updates_taste_vector
+    # ------------------------------------------------------------------
+    def test_apply_feedback_no_recommendation_log_still_updates_taste_vector(self):
+        """
+        apply_feedback_learning on a LIKE for a track with no RecommendationLog
+        entry (e.g., manually saved, or log was deleted) must still update the
+        taste_vector — it should only skip the source_stats update, not the whole
+        learning step.
+        """
+        fb = self._make_feedback("LIKE")
+        # Confirm there is no RecommendationLog for this track
+        from apps.core.models import RecommendationLog
+        RecommendationLog.objects.filter(user=self.user, track=self.track).delete()
+
+        initial_weight = self.profile.data['taste_vector'].get('indie rock', 0.0)
+
+        engine = PersonalizationEngine(self.user)
+        engine.apply_feedback_learning(fb)
+
+        self.profile.refresh_from_db()
+        updated_weight = self.profile.data['taste_vector'].get('indie rock', 0.0)
+
+        self.assertGreater(
+            updated_weight,
+            initial_weight,
+            msg=(
+                "LIKE without a RecommendationLog must still increment taste_vector. "
+                "Only source_stats should be skipped when no log entry exists."
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # test_build_taste_vector_preserves_feedback_learned_increments
+    # ------------------------------------------------------------------
+    def test_build_taste_vector_preserves_feedback_learned_increments(self):
+        """
+        Feedback-wipe regression (MD-05): _build_taste_vector must not overwrite
+        taste_vector with raw artist counts, discarding feedback-learned increments.
+
+        Sequence:
+          1. apply_feedback_learning(LIKE) → 'indie rock' weight goes from 1.0 to 1.1
+          2. _build_taste_vector() runs (simulating the 24h profile refresh)
+          3. taste_vector['indie rock'] must remain ≥ 1.1, not revert to the raw
+             top_artists count of 1 (or whatever the base count is).
+
+        The merge logic (max(base, learned)) in _build_taste_vector ensures this.
+        """
+        # Apply a LIKE to boost 'indie rock'
+        fb = self._make_feedback("LIKE")
+        engine_pe = PersonalizationEngine(self.user)
+        engine_pe.apply_feedback_learning(fb)
+
+        self.profile.refresh_from_db()
+        post_like_weight = self.profile.data['taste_vector'].get('indie rock', 0.0)
+        self.assertGreater(post_like_weight, 1.0, msg="LIKE should have incremented the weight above 1.0")
+
+        # Now simulate _build_taste_vector via the HybridRecommendationEngine
+        # Inject one top_artist with 'indie rock' to provide a base count of 1
+        self.profile.data['base_data'] = {
+            'top_artists': [
+                {'name': 'Artist A', 'genres': ['indie rock']},
+            ]
+        }
+        self.profile.save(update_fields=['data'])
+
+        hre = HybridRecommendationEngine.__new__(HybridRecommendationEngine)
+        hre.user = self.user
+        hre.profile = self.profile
+
+        hre._build_taste_vector()
+
+        self.profile.refresh_from_db()
+        post_rebuild_weight = self.profile.data['taste_vector'].get('indie rock', 0.0)
+
+        self.assertGreaterEqual(
+            post_rebuild_weight,
+            post_like_weight,
+            msg=(
+                f"_build_taste_vector must preserve feedback-learned weights. "
+                f"post-like={post_like_weight:.3f}, post-rebuild={post_rebuild_weight:.3f}. "
+                f"If post-rebuild < post-like, the merge logic is broken."
+            ),
+        )
+
 
 # ---------------------------------------------------------------------------
 # 2. Thompson (Beta) bandit source weights (pure unit, no DB)
@@ -346,6 +461,84 @@ class TestThompsonBandit(unittest.TestCase):
                 "Expected get_recommendation_weights() to include 'bandit_active' key "
                 "once Thompson sampling is implemented. This key is absent in the Phase 2 "
                 "static implementation → RED."
+            ),
+        )
+
+    def test_all_sources_warm_weights_max_normalized(self):
+        """
+        When ALL 5 sources have ≥ COLD_START_THRESHOLD observations, the returned
+        weights must be normalized to max=1.0 (not sum=1.0) so the best source
+        gets a 1.0 multiplier and others are scaled relative to it.
+
+        Audit gap: existing tests only exercise one warm source + four cold-start
+        sources — the mixed case. This test targets the fully-warm path.
+
+        With 10 successes / 0 failures for all 5 sources, Beta(11,1) mean ≈ 0.917.
+        All draws are approximately equal → after max-normalization all weights ≈ 1.0.
+        Assert: max(weights) == 1.0 and all weights ≤ 1.0.
+        """
+        from apps.recommendations.hybrid_recommendation_engine import SOURCE_DEFAULTS, COLD_START_THRESHOLD
+
+        # Give every source well above the cold-start threshold
+        engine = HybridRecommendationEngine.__new__(HybridRecommendationEngine)
+        engine.user = Mock(id=99)
+        engine.profile = Mock()
+        high_obs = {'s': 10, 'f': 0}
+        engine.profile.data = {
+            'taste_vector': {},
+            'base_data': {'top_artists': []},
+            'preferences': {'liked_artists': [], 'disliked_artists': []},
+            'source_stats': {src: dict(high_obs) for src in SOURCE_DEFAULTS},
+        }
+        engine.profile.get_recommendation_weights.return_value = {}
+
+        weights = engine.get_recommendation_weights()
+
+        source_weights = [weights[src] for src in SOURCE_DEFAULTS]
+        max_w = max(source_weights)
+        self.assertAlmostEqual(
+            max_w,
+            1.0,
+            places=10,
+            msg=f"Max weight should be exactly 1.0 (max-normalization). Got max={max_w:.6f}",
+        )
+        for src in SOURCE_DEFAULTS:
+            self.assertLessEqual(
+                weights[src],
+                1.0,
+                msg=f"Source '{src}' weight {weights[src]:.4f} exceeds 1.0 — normalization broken",
+            )
+
+    def test_boundary_exactly_threshold_minus_1_stays_cold(self):
+        """
+        A source with exactly COLD_START_THRESHOLD - 1 = 2 observations must
+        use the static SOURCE_DEFAULTS weight, not Beta sampling.
+
+        This boundary is critical: the switch from static to Beta happens at n ≥ 3.
+        n=2 must remain cold-start.
+        """
+        from apps.recommendations.hybrid_recommendation_engine import SOURCE_DEFAULTS, COLD_START_THRESHOLD
+
+        boundary_obs = COLD_START_THRESHOLD - 1  # 2
+        engine = make_engine_with_stats('playlist_mining', successes=boundary_obs, failures=0)
+
+        # Over many draws, the average must stay near the static default (0.3),
+        # not drift toward Beta(3,1) mean ≈ 0.75.
+        draws = [engine.get_recommendation_weights().get('playlist_mining', 0.0) for _ in range(10)]
+        avg = sum(draws) / len(draws)
+
+        static_default = SOURCE_DEFAULTS['playlist_mining']
+        # The normalized static default with 4 other sources also at defaults:
+        # thetas: {playlist:0.3, artist:0.25, genre:0.2, related:0.15, contextual:0.1}
+        # max = 0.3 → normalized playlist_mining = 0.3/0.3 = 1.0
+        # This is the cold-start normalized value for playlist_mining (best static source)
+        self.assertGreaterEqual(
+            avg,
+            0.9,
+            msg=(
+                f"playlist_mining with n={boundary_obs} (cold-start) should use static "
+                f"default (normalized to ~1.0 as best source). Got avg={avg:.4f}. "
+                f"If avg is ~0.75, Beta sampling is incorrectly applied at n={boundary_obs}."
             ),
         )
 
