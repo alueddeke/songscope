@@ -130,14 +130,12 @@ class HybridRecommendationEngine:
                     stats.get('f', 0) + 1,
                 )
 
-        # Normalize so weights sum to 1.0
-        total = sum(thetas.values())
-        if total == 0.0:
-            result = {source: 1.0 for source in SOURCE_DEFAULTS}
-            result['bandit_active'] = True
-            return result
-
-        result = {k: v / total for k, v in thetas.items()}
+        # Normalize to max=1.0 so the best source gets a 1.0 multiplier.
+        # Normalizing to sum=1.0 would make each weight ~0.2, penalizing warm
+        # sources relative to the cold-start 1.0 baseline — the bandit would
+        # work backwards.
+        max_weight = max(thetas.values()) or 1.0
+        result = {k: v / max_weight for k, v in thetas.items()}
         result['bandit_active'] = True
         return result
 
@@ -215,18 +213,6 @@ class HybridRecommendationEngine:
             # Remove duplicates and score
             unique_recommendations = self._remove_duplicates(all_recommendations)
             scored_recommendations = self._score_recommendations(unique_recommendations)
-            
-            # Add more randomization for variety
-            # Shuffle multiple times for better randomization
-            for _ in range(3):
-                random.shuffle(scored_recommendations)
-            
-            # Add some randomness to scores for more variety
-            for rec in scored_recommendations:
-                rec['score'] += random.uniform(-0.1, 0.1)  # Add small random variation
-            
-            # Re-sort by new scores
-            scored_recommendations.sort(key=lambda x: x['score'], reverse=True)
             
             # Filter out liked songs and recently played
             scored_recommendations = self._filter_out_liked_songs(scored_recommendations)
@@ -801,14 +787,29 @@ class HybridRecommendationEngine:
         return unique_recommendations
     
     def _build_taste_vector(self):
-        """Build genre frequency vector from top_artists. Stored as raw counts."""
+        """Build genre frequency vector from top_artists and merge with feedback-learned increments.
+
+        Overwiting the whole vector on each 24h refresh would wipe feedback-learned genre
+        weights accumulated via apply_feedback_learning. Instead we compute the base counts
+        from top_artists and take the max of the base value and any feedback-learned value,
+        preserving pure-feedback genres not in top_artists entirely.
+        """
         top_artists = self.profile.data.get('base_data', {}).get('top_artists', [])
-        taste_vector = {}
+        base_vector = {}
         for artist in top_artists:
             for genre in artist.get('genres', []):
-                taste_vector[genre] = taste_vector.get(genre, 0) + 1
-        self.profile.data['taste_vector'] = taste_vector
-        logger.info(f"Built taste vector with {len(taste_vector)} genres from {len(top_artists)} artists")
+                base_vector[genre] = base_vector.get(genre, 0) + 1
+
+        existing = self.profile.data.get('taste_vector', {})
+        merged = dict(base_vector)
+        for genre, val in existing.items():
+            if genre in merged:
+                merged[genre] = max(merged[genre], val)
+            else:
+                merged[genre] = val
+
+        self.profile.data['taste_vector'] = merged
+        logger.info(f"Built taste vector with {len(merged)} genres from {len(top_artists)} artists")
 
     def _cosine_similarity(self, vec_a: dict, vec_b: dict) -> float:
         """Cosine similarity between two genre count dicts. Returns 0.0 if either empty."""

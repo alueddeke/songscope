@@ -82,7 +82,7 @@ def spotify_callback(request):
             user=user,
             defaults={
                 'access_token': token['access_token'],
-                'refresh_token': token.get('refresh_token'),
+                'refresh_token': token.get('refresh_token') or '',
                 'expires_at': expires_at,
             }
         )

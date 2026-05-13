@@ -16,7 +16,7 @@ class SpotifyToken(models.Model):
     """Model to store Spotify OAuth tokens for users"""
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     access_token = models.CharField(max_length=255)
-    refresh_token = models.CharField(max_length=255)
+    refresh_token = models.CharField(max_length=255, blank=True, null=True)
     expires_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
