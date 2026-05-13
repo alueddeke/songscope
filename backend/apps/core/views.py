@@ -29,7 +29,7 @@ from apps.spotify.utils import get_spotipy_client, refresh_spotify_token
 from apps.recommendations.feature_extractor import extract_current_user_profile, get_recommendations
 from apps.recommendations.recommendation_engine import RecommendationEngine
 from apps.recommendations.hybrid_recommendation_engine import HybridRecommendationEngine
-from apps.ai.ai_feedback_service import FeedbackInterpreter, RateLimitExceeded, CostLimitExceeded
+from apps.ai.ai_feedback_service import get_feedback_interpreter, RateLimitExceeded, CostLimitExceeded
 from utils.logging_config import logger
 
 if settings.OAUTHLIB_INSECURE_TRANSPORT:
@@ -93,7 +93,7 @@ def spotify_callback(request):
         return redirect(f"{frontend_url}/profile")
     except Exception as e:
         logger.error(f"Error in spotify_callback: {str(e)}", exc_info=True)
-        return JsonResponse({'error': f"Failed to process callback: {str(e)}"}, status=400)
+        return JsonResponse({'error': 'Authentication failed. Please try again.'}, status=400)
 
 @login_required
 def get_user_top_tracks(request):
@@ -731,7 +731,7 @@ def submit_ai_feedback(request):
             )
 
         # Initialize AI feedback interpreter
-        interpreter = FeedbackInterpreter()
+        interpreter = get_feedback_interpreter()
 
         try:
             # Interpret the feedback

@@ -51,17 +51,21 @@ export default function AIFeedbackInput({ trackId, onFeedbackSubmitted }: AIFeed
 
   // Rotate placeholders every 3 seconds with smooth transition
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
     const interval = setInterval(() => {
       setIsPlaceholderTransitioning(true);
-      setTimeout(() => {
-        setCurrentPlaceholderIndex((prev) => 
+      timeoutId = setTimeout(() => {
+        setCurrentPlaceholderIndex((prev) =>
           (prev + 1) % PLACEHOLDER_SUGGESTIONS.length
         );
         setIsPlaceholderTransitioning(false);
       }, 250);
     }, 3000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

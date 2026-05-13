@@ -352,12 +352,16 @@ class HybridRecommendationEngine:
             if not self._check_rate_limit():
                 return
             
-            # Get ALL saved tracks via pagination (Spotify API max is 50 per request)
+            # Cap at 10 pages (500 tracks) — unbounded pagination causes memory spikes
+            # and exhausts Spotify API budget for users with large libraries.
+            MAX_SAVED_PAGES = 10
             results = sp.current_user_saved_tracks(limit=50)
             all_items = list(results['items'])
-            while results['next']:
+            page_count = 1
+            while results['next'] and page_count < MAX_SAVED_PAGES:
                 results = sp.next(results)
                 all_items.extend(results['items'])
+                page_count += 1
             saved_tracks_list = [
                 {
                     'id': item['track']['id'],

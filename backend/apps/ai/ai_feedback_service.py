@@ -206,4 +206,16 @@ Only include fields that are clearly indicated in the feedback. Be conservative 
 
 class RateLimitExceeded(Exception):
     """Raised when rate limit is exceeded"""
-    pass 
+    pass
+
+
+# Module-level singleton — daily_cost and request history persist across requests
+# within a single worker process. Better than resetting to 0 per request.
+_interpreter_instance: 'FeedbackInterpreter | None' = None
+
+
+def get_feedback_interpreter() -> 'FeedbackInterpreter':
+    global _interpreter_instance
+    if _interpreter_instance is None:
+        _interpreter_instance = FeedbackInterpreter()
+    return _interpreter_instance

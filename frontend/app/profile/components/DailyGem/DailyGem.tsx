@@ -146,10 +146,12 @@ export default function DailyGem() {
           </span>
         </div>
 
-        {/* AI explanation */}
-        <blockquote className="border-l-2 border-green pl-4 py-1">
-          <p className="text-gray-300 italic text-sm leading-relaxed">{explanation}</p>
-        </blockquote>
+        {/* AI explanation — only render when non-empty to avoid orphan border */}
+        {explanation && (
+          <blockquote className="border-l-2 border-green pl-4 py-1">
+            <p className="text-gray-300 italic text-sm leading-relaxed">{explanation}</p>
+          </blockquote>
+        )}
 
         {/* Audio preview */}
         {track.preview_url && (

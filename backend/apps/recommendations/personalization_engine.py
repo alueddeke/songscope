@@ -284,9 +284,10 @@ class PersonalizationEngine:
             return
         taste_vector = profile.data.get('taste_vector', {})
 
+        TASTE_VECTOR_MAX = 5.0  # cap prevents unbounded growth from like/unlike cycles
         if feedback.feedback_type in ('LIKE', 'SAVE'):
             for genre in genres:
-                taste_vector[genre] = taste_vector.get(genre, 0.0) + TASTE_VECTOR_LR
+                taste_vector[genre] = min(taste_vector.get(genre, 0.0) + TASTE_VECTOR_LR, TASTE_VECTOR_MAX)
         elif feedback.feedback_type in ('DISLIKE', 'SKIP'):
             for genre in genres:
                 taste_vector[genre] = max(0.0, taste_vector.get(genre, 0.0) - TASTE_VECTOR_LR)
