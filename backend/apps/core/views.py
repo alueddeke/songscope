@@ -842,6 +842,14 @@ def add_track_to_liked(request):
         sp = get_spotipy_client(spotify_token.access_token)
         sp.current_user_saved_tracks_add([track_id])
 
+        try:
+            today = timezone.localdate()
+            DailyGem.objects.filter(
+                user=request.user, date=today, track__spotify_id=track_id
+            ).update(was_saved=True)
+        except Exception:
+            pass
+
         return JsonResponse({'message': "all good"})
 
     except SpotifyException as e:
