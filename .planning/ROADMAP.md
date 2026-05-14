@@ -183,7 +183,10 @@ _Last updated: 2026-05-12_
 **Plans**: 2 plans
 
 Plans:
+**Wave 1**
 - [ ] 06-01-PLAN.md — Add 4 fields to DailyGem model + auto-generate migration 0008 (score_breakdown, score_total, was_saved, taste_vector_snapshot)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 06-02-PLAN.md — TestDailyGemNewFields ORM round-trip tests + full backend regression suite
 
 ### Phase 7: Backend Wiring
