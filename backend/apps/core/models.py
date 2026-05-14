@@ -287,6 +287,10 @@ class DailyGem(models.Model):
     preview_url = models.URLField(max_length=500, blank=True)
     track_popularity = models.IntegerField(default=0)
     was_liked = models.BooleanField(null=True, blank=True)
+    score_breakdown = models.JSONField(default=dict, blank=True)
+    score_total = models.FloatField(null=True, blank=True)
+    was_saved = models.BooleanField(null=True, blank=True)
+    taste_vector_snapshot = models.JSONField(null=True, blank=True)
     was_skipped = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
