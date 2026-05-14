@@ -295,3 +295,96 @@ class TestDailyGemNewFields(TestCase):
         self.gem.save(update_fields=['taste_vector_snapshot'])
         self.gem.refresh_from_db()
         self.assertEqual(self.gem.taste_vector_snapshot['rock'], 0.9)
+
+
+class TestWasSavedWiring(TestCase):
+    """
+    Phase 7 Plan 02 — Task 1: Verify that add_track_to_liked wires DailyGem.was_saved.
+
+    Tests:
+      1. Matching track sets was_saved=True.
+      2. Non-matching track is a silent no-op (was_saved stays None).
+      3. DB exception during update is non-fatal (response still 200).
+      4. Spotify save is called before was_saved update.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user('saveduser', password='pw')
+        self.track = Track.objects.create(
+            spotify_id='X' * 22,
+            name='Saved Track',
+            artist='Artist',
+            album='Album',
+        )
+        self.gem = DailyGem.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            track=self.track,
+        )
+        self.token = SpotifyToken.objects.create(
+            user=self.user,
+            access_token='fake_access_token',
+            refresh_token='fake_refresh_token',
+            expires_at=timezone.now() + timedelta(days=3650),
+        )
+        self.client.force_login(self.user)
+
+    @patch('apps.core.views.get_spotipy_client')
+    def test_matching_track_sets_was_saved_true(self, mock_sp_client):
+        """POST add-track-to-liked with matching track_id → DailyGem.was_saved becomes True."""
+        mock_sp_client.return_value = MagicMock()
+
+        response = self.client.post(
+            '/api/add-track-to-liked/',
+            data=json.dumps({'track_id': 'X' * 22}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.gem.refresh_from_db()
+        self.assertIs(self.gem.was_saved, True)
+
+    @patch('apps.core.views.get_spotipy_client')
+    def test_nonmatching_track_is_silent_noop(self, mock_sp_client):
+        """POST with a different track_id → was_saved remains None (no matching DailyGem row)."""
+        mock_sp_client.return_value = MagicMock()
+
+        response = self.client.post(
+            '/api/add-track-to-liked/',
+            data=json.dumps({'track_id': 'Y' * 22}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.gem.refresh_from_db()
+        self.assertIsNone(self.gem.was_saved)
+
+    @patch('apps.core.views.DailyGem')
+    @patch('apps.core.views.get_spotipy_client')
+    def test_db_exception_during_update_is_nonfatal(self, mock_sp_client, mock_dg):
+        """DB exception inside the was_saved block → response still 200 with 'all good'."""
+        mock_sp_client.return_value = MagicMock()
+        mock_dg.objects.filter.return_value.update.side_effect = Exception('db boom')
+
+        response = self.client.post(
+            '/api/add-track-to-liked/',
+            data=json.dumps({'track_id': 'X' * 22}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['message'], 'all good')
+
+    @patch('apps.core.views.get_spotipy_client')
+    def test_spotify_save_called_before_was_saved_update(self, mock_sp_client):
+        """Spotify current_user_saved_tracks_add is called exactly once (confirming order)."""
+        mock_client_instance = MagicMock()
+        mock_sp_client.return_value = mock_client_instance
+
+        self.client.post(
+            '/api/add-track-to-liked/',
+            data=json.dumps({'track_id': 'X' * 22}),
+            content_type='application/json',
+        )
+
+        mock_client_instance.current_user_saved_tracks_add.assert_called_once_with(['X' * 22])

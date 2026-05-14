@@ -42,13 +42,14 @@ def _make_track(spotify_id, genres=None):
     return track
 
 
-def _make_gem(user, track, date, was_liked=None, track_popularity=50):
+def _make_gem(user, track, date, was_liked=None, was_saved=None, track_popularity=50):
     """Create a DailyGem row."""
     return DailyGem.objects.create(
         user=user,
         track=track,
         date=date,
         was_liked=was_liked,
+        was_saved=was_saved,
         track_popularity=track_popularity,
     )
 
@@ -161,6 +162,7 @@ class TestMetricsEndpoint(TestCase):
             'top_genres_pct',
             'improvement_story',
             'diversity_score',
+            'compound_hit_rate',
         ]
         for field in required_fields:
             self.assertIn(field, data, msg=f"Missing field: {field}")
@@ -218,6 +220,99 @@ class TestMetricsEndpoint(TestCase):
         anon_client = Client()
         response = anon_client.get(self.ENDPOINT)
         self.assertIn(response.status_code, (401, 403))
+
+    # --- compound_hit_rate tests (Phase 7 Plan 02) ---
+
+    def test_compound_hit_rate_key_present_in_response(self):
+        """When gems exist, response contains a 'compound_hit_rate' key."""
+        today = datetime.date.today()
+        for i in range(5):
+            track = _make_track(f'chr-present-{i}')
+            _make_gem(self.user, track, today - datetime.timedelta(days=i),
+                      was_liked=(i % 2 == 0), was_saved=None, track_popularity=50)
+
+        response = self.client.get(self.ENDPOINT)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('compound_hit_rate', data)
+
+    def test_compound_hit_rate_all_liked(self):
+        """4 gems all with was_liked=True → compound_hit_rate == 1.0."""
+        today = datetime.date.today()
+        for i in range(4):
+            track = _make_track(f'chr-all-liked-{i}')
+            _make_gem(self.user, track, today - datetime.timedelta(days=i),
+                      was_liked=True, was_saved=None, track_popularity=50)
+
+        response = self.client.get(self.ENDPOINT)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertAlmostEqual(data['compound_hit_rate'], 1.0, places=4)
+
+    def test_compound_hit_rate_disjoint_or(self):
+        """
+        4 gems — gem A was_liked=True/was_saved=None; gem B was_liked=False/was_saved=True;
+        gem C was_liked=None/was_saved=None; gem D was_liked=False/was_saved=False.
+        compound_hit_rate == 0.5 (A and B are hits; C and D are misses).
+        """
+        today = datetime.date.today()
+        track_a = _make_track('chr-disjoint-a')
+        track_b = _make_track('chr-disjoint-b')
+        track_c = _make_track('chr-disjoint-c')
+        track_d = _make_track('chr-disjoint-d')
+        _make_gem(self.user, track_a, today,                            was_liked=True,  was_saved=None,  track_popularity=50)
+        _make_gem(self.user, track_b, today - datetime.timedelta(days=1), was_liked=False, was_saved=True,  track_popularity=50)
+        _make_gem(self.user, track_c, today - datetime.timedelta(days=2), was_liked=None,  was_saved=None,  track_popularity=50)
+        _make_gem(self.user, track_d, today - datetime.timedelta(days=3), was_liked=False, was_saved=False, track_popularity=50)
+
+        response = self.client.get(self.ENDPOINT)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertAlmostEqual(data['compound_hit_rate'], 0.5, places=4)
+
+    def test_compound_hit_rate_liked_and_saved_overlap_counts_once(self):
+        """
+        3 gems — gem A was_liked=True/was_saved=True (overlap); gem B was_liked=None/was_saved=None;
+        gem C was_liked=False/was_saved=False.
+        compound_hit_rate == 1/3 (overlap counts once, not twice).
+        """
+        today = datetime.date.today()
+        track_a = _make_track('chr-overlap-a')
+        track_b = _make_track('chr-overlap-b')
+        track_c = _make_track('chr-overlap-c')
+        _make_gem(self.user, track_a, today,                            was_liked=True,  was_saved=True,  track_popularity=50)
+        _make_gem(self.user, track_b, today - datetime.timedelta(days=1), was_liked=None,  was_saved=None,  track_popularity=50)
+        _make_gem(self.user, track_c, today - datetime.timedelta(days=2), was_liked=False, was_saved=False, track_popularity=50)
+
+        response = self.client.get(self.ENDPOINT)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertAlmostEqual(data['compound_hit_rate'], 1 / 3, places=4)
+
+    def test_compound_hit_rate_zero_hits(self):
+        """3 gems all was_liked=False/was_saved=False → compound_hit_rate == 0.0."""
+        today = datetime.date.today()
+        for i in range(3):
+            track = _make_track(f'chr-zero-{i}')
+            _make_gem(self.user, track, today - datetime.timedelta(days=i),
+                      was_liked=False, was_saved=False, track_popularity=50)
+
+        response = self.client.get(self.ENDPOINT)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertAlmostEqual(data['compound_hit_rate'], 0.0, places=4)
+
+    def test_compound_hit_rate_none_is_miss(self):
+        """was_liked=None and was_saved=None both count as misses (identity check is True)."""
+        today = datetime.date.today()
+        track = _make_track('chr-none-miss')
+        _make_gem(self.user, track, today, was_liked=None, was_saved=None, track_popularity=50)
+
+        response = self.client.get(self.ENDPOINT)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        # 1 gem, 0 hits → compound_hit_rate == 0.0
+        self.assertAlmostEqual(data['compound_hit_rate'], 0.0, places=4)
 
 
 # ---------------------------------------------------------------------------

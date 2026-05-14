@@ -412,7 +412,7 @@ def get_recommendation_metrics(request):
     try:
         user = request.user
         gems = DailyGem.objects.filter(user=user).order_by('date')
-        gem_list = list(gems.values('was_liked', 'track_popularity', 'date', 'track_id'))
+        gem_list = list(gems.values('was_liked', 'was_saved', 'track_popularity', 'date', 'track_id'))
         gem_total = len(gem_list)
 
         if gem_total == 0:
@@ -422,6 +422,10 @@ def get_recommendation_metrics(request):
         gem_disliked = sum(1 for g in gem_list if g['was_liked'] is False)
         # Ratio 0..1 (MetricsStrip multiplies by 100 for display)
         gem_acceptance_rate = gem_liked / gem_total
+        # compound_hit_rate: (was_liked=True OR was_saved=True) / total (D-12)
+        # None counts as a miss — identity check ensures None != True (D-13)
+        compound_hits = sum(1 for g in gem_list if g['was_liked'] is True or g['was_saved'] is True)
+        compound_hit_rate = compound_hits / gem_total
 
         avg_pop = gems.aggregate(avg=Avg('track_popularity'))['avg'] or 0
         # hidden_gem_rate uses DailyGem.track_popularity, NOT RecommendationLog.was_novel (Pitfall 4)
@@ -486,6 +490,7 @@ def get_recommendation_metrics(request):
             'gem_liked': gem_liked,
             'gem_disliked': gem_disliked,
             'gem_acceptance_rate': gem_acceptance_rate,
+            'compound_hit_rate': compound_hit_rate,
             'top_genres': top_genres,
             'top_genres_pct': top_genres_pct,
             'improvement_story': improvement_story,
@@ -841,6 +846,14 @@ def add_track_to_liked(request):
 
         sp = get_spotipy_client(spotify_token.access_token)
         sp.current_user_saved_tracks_add([track_id])
+
+        try:
+            today = timezone.localdate()
+            DailyGem.objects.filter(
+                user=request.user, date=today, track__spotify_id=track_id
+            ).update(was_saved=True)
+        except Exception:
+            pass
 
         return JsonResponse({'message': "all good"})
 
