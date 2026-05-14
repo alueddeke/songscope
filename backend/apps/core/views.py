@@ -1115,7 +1115,7 @@ def get_daily_gem(request):
                 'explanation': gem.explanation,
                 'date': str(gem.date),
                 'cached': True,
-                'score_breakdown': {},
+                'score_breakdown': gem.score_breakdown,
             })
         except DailyGem.DoesNotExist:
             pass  # Fall through to fresh branch
@@ -1191,7 +1191,7 @@ def get_daily_gem(request):
                 'explanation': gem.explanation,
                 'date': str(gem.date),
                 'cached': True,
-                'score_breakdown': {},
+                'score_breakdown': gem.score_breakdown,
             })
 
         return JsonResponse({
