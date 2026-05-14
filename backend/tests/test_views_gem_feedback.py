@@ -314,3 +314,117 @@ class TestBuildGemExplanation(TestCase):
         result = _build_gem_explanation(breakdown, 'Track', 'Artist', 'playlist mining')
         self.assertIsInstance(result, str)
         self.assertGreater(len(result), 0)
+
+
+# ---------------------------------------------------------------------------
+# get_daily_gem fresh branch — score persistence ORM tests
+# ---------------------------------------------------------------------------
+
+class TestGetDailyGemFreshScores(TestCase):
+    """
+    ORM round-trip tests for the fresh-branch of get_daily_gem.
+    Verifies that score_breakdown, score_total, taste_vector_snapshot, and explanation
+    are all persisted in the get_or_create defaults dict when a new gem is created.
+    """
+
+    BREAKDOWN = {
+        'genre_sim': 0.7,
+        'novelty': 0.4,
+        'feedback_multiplier': 0.2,
+        'source': 'playlist mining',
+    }
+    SCORE = 0.46
+    TASTE_VECTOR = {'indie rock': 5.0, 'shoegaze': 3.0}
+
+    def _mock_engine(self, MockEngine, breakdown=None, score=None, taste_vector=None):
+        """Configure a mock HybridRecommendationEngine instance."""
+        if breakdown is None:
+            breakdown = self.BREAKDOWN
+        if score is None:
+            score = self.SCORE
+        instance = MockEngine.return_value
+        instance.get_recommendations.return_value = [
+            {
+                'id': 'D' * 22,
+                'name': 'Fresh Track',
+                'artist': 'Fresh Artist',
+                'album': 'Fresh Album',
+                'popularity': 25,
+                'image_url': 'http://img.example.com/fresh.jpg',
+                'preview_url': 'http://preview.example.com/fresh.mp3',
+                'source': breakdown.get('source', 'playlist mining'),
+                'score': score,
+                'score_breakdown': breakdown,
+            }
+        ]
+        instance.profile = MagicMock()
+        tv = taste_vector if taste_vector is not None else self.TASTE_VECTOR
+        instance.profile.data = {'taste_vector': tv}
+        return instance
+
+    def setUp(self):
+        self.user = _make_user_with_token('fresh_scores_user')
+        self.client.force_login(self.user)
+
+    @patch('apps.core.views.HybridRecommendationEngine')
+    def test_score_breakdown_persisted(self, MockEngine):
+        """Fresh GET persists the full score_breakdown dict to DailyGem."""
+        self._mock_engine(MockEngine)
+        self.client.get('/api/daily-gem/')
+        gem = DailyGem.objects.get(user=self.user, date=timezone.localdate())
+        self.assertEqual(gem.score_breakdown, self.BREAKDOWN)
+
+    @patch('apps.core.views.HybridRecommendationEngine')
+    def test_score_total_persisted(self, MockEngine):
+        """Fresh GET persists the score float as score_total."""
+        self._mock_engine(MockEngine)
+        self.client.get('/api/daily-gem/')
+        gem = DailyGem.objects.get(user=self.user, date=timezone.localdate())
+        self.assertAlmostEqual(gem.score_total, self.SCORE, places=5)
+
+    @patch('apps.core.views.HybridRecommendationEngine')
+    def test_taste_vector_snapshot_persisted(self, MockEngine):
+        """Fresh GET persists engine.profile.data['taste_vector'] as taste_vector_snapshot."""
+        self._mock_engine(MockEngine)
+        self.client.get('/api/daily-gem/')
+        gem = DailyGem.objects.get(user=self.user, date=timezone.localdate())
+        self.assertEqual(gem.taste_vector_snapshot, self.TASTE_VECTOR)
+
+    @patch('apps.core.views.HybridRecommendationEngine')
+    def test_taste_vector_snapshot_defaults_to_empty_dict(self, MockEngine):
+        """Fresh GET with no taste_vector in profile.data persists {} as snapshot."""
+        self._mock_engine(MockEngine, taste_vector=None)
+        # Override to empty profile data
+        instance = MockEngine.return_value
+        instance.profile.data = {}
+        self.client.get('/api/daily-gem/')
+        gem = DailyGem.objects.get(user=self.user, date=timezone.localdate())
+        self.assertEqual(gem.taste_vector_snapshot, {})
+
+    @patch('apps.core.views.HybridRecommendationEngine')
+    def test_explanation_populated_via_helper(self, MockEngine):
+        """Fresh GET persists a non-empty explanation using _build_gem_explanation."""
+        self._mock_engine(MockEngine)  # genre_sim=0.7 is dominant
+        self.client.get('/api/daily-gem/')
+        gem = DailyGem.objects.get(user=self.user, date=timezone.localdate())
+        self.assertNotEqual(gem.explanation, '')
+        self.assertIn('genre similarity:', gem.explanation)
+
+    @patch('apps.core.views.HybridRecommendationEngine')
+    def test_json_response_explanation_matches_persisted(self, MockEngine):
+        """JSON response explanation equals the persisted gem.explanation (not empty string)."""
+        self._mock_engine(MockEngine)
+        response = self.client.get('/api/daily-gem/')
+        data = json.loads(response.content)
+        gem = DailyGem.objects.get(user=self.user, date=timezone.localdate())
+        self.assertEqual(data['explanation'], gem.explanation)
+        self.assertNotEqual(data['explanation'], '')
+
+    @patch('apps.core.views.HybridRecommendationEngine')
+    def test_json_response_score_breakdown_matches_persisted(self, MockEngine):
+        """JSON response score_breakdown matches the persisted gem (fresh-branch path)."""
+        self._mock_engine(MockEngine)
+        response = self.client.get('/api/daily-gem/')
+        data = json.loads(response.content)
+        gem = DailyGem.objects.get(user=self.user, date=timezone.localdate())
+        self.assertEqual(data['score_breakdown'], gem.score_breakdown)
