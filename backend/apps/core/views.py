@@ -1149,13 +1149,26 @@ def get_daily_gem(request):
             },
         )
 
+        # Extract score fields from the top candidate
+        breakdown = gem_data.get('score_breakdown', {})
+        taste_snapshot = engine.profile.data.get('taste_vector', {})
+
         # Persist DailyGem row (unique_together user+date enforces one gem per day)
+        # All 4 score fields are written in a single DB write as part of defaults (D-10).
         gem, created = DailyGem.objects.get_or_create(
             user=request.user,
             date=today,
             defaults={
                 'track': track_obj,
-                'explanation': '',
+                'explanation': _build_gem_explanation(
+                    breakdown,
+                    gem_data.get('name', ''),
+                    gem_data.get('artist', ''),
+                    breakdown.get('source', ''),
+                ),
+                'score_breakdown': breakdown,
+                'score_total': gem_data.get('score', None),
+                'taste_vector_snapshot': taste_snapshot,
                 'image_url': gem_data.get('image_url') or '',
                 'preview_url': gem_data.get('preview_url') or '',
                 'track_popularity': gem_data.get('popularity', 0),
@@ -1191,7 +1204,7 @@ def get_daily_gem(request):
                 'image_url': gem_data.get('image_url'),
                 'preview_url': gem_data.get('preview_url'),
             },
-            'explanation': '',
+            'explanation': gem.explanation,
             'date': str(today),
             'cached': False,
             'score_breakdown': gem_data.get('score_breakdown', {}),
