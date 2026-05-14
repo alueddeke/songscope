@@ -198,7 +198,14 @@ Plans:
   2. Calling `GET /api/daily-gem/` a second time the same day (cached branch) returns the same non-empty `score_breakdown` and `explanation` read from the DB — not hardcoded `{}`
   3. Clicking the heart/save button triggers `DailyGem.was_saved = True` in the DB; a failure to write is non-fatal and does not 500 the save action
   4. `GET /api/recommendation-metrics/` returns a `compound_hit_rate` key computed as `(was_liked OR was_saved) / total_gems`
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+**Wave 1**
+- [ ] 07-01-PLAN.md — _build_gem_explanation helper + expand get_or_create defaults (score_breakdown, score_total, taste_vector_snapshot, explanation) + fix cached/race branch score_breakdown reads + fresh-branch JsonResponse explanation read (SCHEMA-02, SCHEMA-03, SCHEMA-04, EXPLAIN-01, EXPLAIN-02)
+
+**Wave 2** *(blocked on Wave 1 completion — both plans modify views.py)*
+- [ ] 07-02-PLAN.md — Non-fatal was_saved update in add_track_to_liked + compound_hit_rate computation and response key in get_recommendation_metrics (METRIC-02)
 
 ### Phase 8: Frontend Score Breakdown
 **Goal**: Users can see what drove their daily gem pick directly on the gem card, and the metrics strip shows compound hit rate
@@ -226,8 +233,8 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Schema Migration | 0/2 | Not started | - |
-| 7. Backend Wiring | 0/? | Not started | - |
+| 6. Schema Migration | 2/2 | Complete | 2026-05-14 |
+| 7. Backend Wiring | 0/2 | Planned | - |
 | 8. Frontend Score Breakdown | 0/? | Not started | - |
 | 9. Documentation Sync | 0/? | Not started | - |
 
@@ -246,4 +253,4 @@ Phase 9 can begin after Phase 7 completes; it does not block Phase 8.
 
 ---
 
-_Last updated: 2026-05-13_
+_Last updated: 2026-05-14_
