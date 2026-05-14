@@ -180,7 +180,11 @@ _Last updated: 2026-05-12_
   1. `DailyGem` table contains `score_breakdown` (JSONField), `score_total` (FloatField nullable), `was_saved` (BooleanField nullable), and `taste_vector_snapshot` (JSONField nullable) columns after running `migrate`
   2. All existing `DailyGem` rows survive migration with no data loss — new columns default to `{}` / `null` as designed
   3. Django ORM can write and read each new field in the shell without error
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Add 4 fields to DailyGem model + auto-generate migration 0008 (score_breakdown, score_total, was_saved, taste_vector_snapshot)
+- [ ] 06-02-PLAN.md — TestDailyGemNewFields ORM round-trip tests + full backend regression suite
 
 ### Phase 7: Backend Wiring
 **Goal**: The API returns populated score breakdowns and explanation text for every gem request, was_saved is recorded on library saves, and compound hit rate is available in the metrics endpoint
@@ -219,7 +223,7 @@ _Last updated: 2026-05-12_
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. Schema Migration | 0/? | Not started | - |
+| 6. Schema Migration | 0/2 | Not started | - |
 | 7. Backend Wiring | 0/? | Not started | - |
 | 8. Frontend Score Breakdown | 0/? | Not started | - |
 | 9. Documentation Sync | 0/? | Not started | - |
