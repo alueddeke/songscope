@@ -1021,6 +1021,64 @@ def get_artist_details(request, artist_id):
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 
+def _build_gem_explanation(breakdown: dict, track_name: str, artist_name: str, source: str) -> str:
+    """
+    Build a deterministic, human-readable explanation for why a gem was picked.
+
+    Pure function: no external calls, no logging, no exceptions on any reasonable input.
+    Returns one of four sentence shapes based on the dominant scoring component, or a
+    neutral fallback when the breakdown is empty or all-zero.
+
+    Args:
+        breakdown:    score_breakdown dict from _score_recommendations (may be empty)
+        track_name:   Spotify track name (unused in current sentences, retained for signature parity)
+        artist_name:  Spotify artist name (used in feedback_multiplier sentence)
+        source:       Discovery strategy label (e.g. 'playlist mining', 'artist network')
+
+    Returns:
+        Human-readable explanation string.
+    """
+    # --- Guard: empty or all-zero breakdown → neutral fallback -----------------
+    if not breakdown:
+        return 'Picked based on your listening patterns'
+
+    genre_sim = breakdown.get('genre_sim', 0.0)
+    novelty = breakdown.get('novelty', 0.0)
+    feedback_multiplier = breakdown.get('feedback_multiplier', 0.0)
+
+    if max(genre_sim, novelty, feedback_multiplier) == 0.0:
+        return 'Picked based on your listening patterns'
+
+    # --- Source string ---------------------------------------------------------
+    source_str = f'via {source}' if source else 'via discovery'
+
+    # --- Dominant component ---------------------------------------------------
+    components = {
+        'genre_sim': genre_sim,
+        'novelty': novelty,
+        'feedback_multiplier': feedback_multiplier,
+    }
+    dominant = max(components, key=components.get)
+
+    # --- Sentence shapes (D-02 / D-03 / D-04) ---------------------------------
+    if dominant == 'genre_sim':
+        pct = round(genre_sim * 100)
+        return (
+            f'Matches your listening taste — genre similarity: {pct}%, '
+            f'discovered {source_str}'
+        )
+    elif dominant == 'novelty':
+        return (
+            f'A hidden gem — low popularity score makes it a genuine discovery, '
+            f'found {source_str}'
+        )
+    else:  # feedback_multiplier
+        return (
+            f"You've liked {artist_name} before — that feedback boosted this pick, "
+            f'sourced {source_str}'
+        )
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_daily_gem(request):
@@ -1057,7 +1115,7 @@ def get_daily_gem(request):
                 'explanation': gem.explanation,
                 'date': str(gem.date),
                 'cached': True,
-                'score_breakdown': {},
+                'score_breakdown': gem.score_breakdown,
             })
         except DailyGem.DoesNotExist:
             pass  # Fall through to fresh branch
@@ -1091,13 +1149,26 @@ def get_daily_gem(request):
             },
         )
 
+        # Extract score fields from the top candidate
+        breakdown = gem_data.get('score_breakdown', {})
+        taste_snapshot = engine.profile.data.get('taste_vector', {})
+
         # Persist DailyGem row (unique_together user+date enforces one gem per day)
+        # All 4 score fields are written in a single DB write as part of defaults (D-10).
         gem, created = DailyGem.objects.get_or_create(
             user=request.user,
             date=today,
             defaults={
                 'track': track_obj,
-                'explanation': '',
+                'explanation': _build_gem_explanation(
+                    breakdown,
+                    gem_data.get('name', ''),
+                    gem_data.get('artist', ''),
+                    breakdown.get('source', ''),
+                ),
+                'score_breakdown': breakdown,
+                'score_total': gem_data.get('score', None),
+                'taste_vector_snapshot': taste_snapshot,
                 'image_url': gem_data.get('image_url') or '',
                 'preview_url': gem_data.get('preview_url') or '',
                 'track_popularity': gem_data.get('popularity', 0),
@@ -1120,7 +1191,7 @@ def get_daily_gem(request):
                 'explanation': gem.explanation,
                 'date': str(gem.date),
                 'cached': True,
-                'score_breakdown': {},
+                'score_breakdown': gem.score_breakdown,
             })
 
         return JsonResponse({
@@ -1133,7 +1204,7 @@ def get_daily_gem(request):
                 'image_url': gem_data.get('image_url'),
                 'preview_url': gem_data.get('preview_url'),
             },
-            'explanation': '',
+            'explanation': gem.explanation,
             'date': str(today),
             'cached': False,
             'score_breakdown': gem_data.get('score_breakdown', {}),
