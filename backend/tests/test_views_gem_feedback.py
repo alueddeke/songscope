@@ -75,6 +75,51 @@ class TestGetDailyGemCached(TestCase):
         data = json.loads(response.content)
         self.assertEqual(data["explanation"], "cached gem explanation")
 
+    def test_cached_response_includes_persisted_score_breakdown(self):
+        """Cached branch: score_breakdown from the persisted gem is surfaced (not {})."""
+        expected_breakdown = {
+            'genre_sim': 0.6,
+            'novelty': 0.3,
+            'feedback_multiplier': 0.1,
+            'source': 'artist network',
+        }
+        DailyGem.objects.filter(
+            user=self.user, date=timezone.localdate()
+        ).update(
+            score_breakdown=expected_breakdown,
+            explanation='Matches your listening taste — genre similarity: 60%, discovered via artist network',
+        )
+
+        response = self.client.get("/api/daily-gem/")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['cached'])
+        self.assertEqual(data['score_breakdown'], expected_breakdown)
+
+    def test_cached_response_explanation_unchanged_regression(self):
+        """Cached branch: explanation from DB is surfaced correctly (regression guard)."""
+        DailyGem.objects.filter(
+            user=self.user, date=timezone.localdate()
+        ).update(
+            score_breakdown={'genre_sim': 0.6, 'novelty': 0.3, 'feedback_multiplier': 0.1, 'source': 'artist network'},
+            explanation='Matches your listening taste — genre similarity: 60%, discovered via artist network',
+        )
+        response = self.client.get("/api/daily-gem/")
+        data = json.loads(response.content)
+        self.assertEqual(
+            data['explanation'],
+            'Matches your listening taste — genre similarity: 60%, discovered via artist network',
+        )
+
+    def test_cached_response_legacy_empty_breakdown_returns_empty_dict(self):
+        """Cached branch: pre-Phase-7 gems with default score_breakdown={} return {} gracefully."""
+        # The setUp gem already has score_breakdown={} (default); no update needed
+        response = self.client.get("/api/daily-gem/")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['cached'])
+        self.assertEqual(data['score_breakdown'], {})
+
 
 # ---------------------------------------------------------------------------
 # get_daily_gem — 503 when engine returns no candidates
@@ -128,6 +173,8 @@ class TestGetDailyGemRace(TestCase):
                 "score": 0.9,
             }
         ]
+        instance.profile = MagicMock()
+        instance.profile.data = {}
 
         # Simulate race: create the gem BEFORE the view's get_or_create runs
         existing_gem = DailyGem.objects.create(
@@ -144,6 +191,51 @@ class TestGetDailyGemRace(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertEqual(data["cached"], True)
+
+    @patch("apps.core.views.HybridRecommendationEngine")
+    def test_race_response_includes_persisted_score_breakdown(self, MockEngine):
+        """Race-condition branch: score_breakdown from the pre-existing gem is surfaced (not {})."""
+        expected_breakdown = {
+            'genre_sim': 0.7,
+            'novelty': 0.2,
+            'feedback_multiplier': 0.1,
+            'source': 'related artists',
+        }
+        instance = MockEngine.return_value
+        instance.get_recommendations.return_value = [
+            {
+                "id": "B" * 22,
+                "name": "Race Track",
+                "artist": "Artist",
+                "album": "Album",
+                "popularity": 30,
+                "image_url": None,
+                "preview_url": None,
+                "source": "related artists",
+                "score": 0.55,
+                "score_breakdown": expected_breakdown,
+            }
+        ]
+        instance.profile = MagicMock()
+        instance.profile.data = {}
+
+        # Pre-create gem with explicit score_breakdown so race-winner returns it
+        DailyGem.objects.create(
+            user=self.user,
+            date=timezone.localdate(),
+            track=self.track,
+            explanation='pre-existing',
+            score_breakdown=expected_breakdown,
+            image_url='',
+            preview_url='',
+            track_popularity=30,
+        )
+
+        response = self.client.get("/api/daily-gem/")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertTrue(data['cached'])
+        self.assertEqual(data['score_breakdown'], expected_breakdown)
 
 
 # ---------------------------------------------------------------------------
