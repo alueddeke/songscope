@@ -202,7 +202,7 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 07-01-PLAN.md — _build_gem_explanation helper + expand get_or_create defaults (score_breakdown, score_total, taste_vector_snapshot, explanation) + fix cached/race branch score_breakdown reads + fresh-branch JsonResponse explanation read (SCHEMA-02, SCHEMA-03, SCHEMA-04, EXPLAIN-01, EXPLAIN-02)
+- [x] 07-01-PLAN.md — _build_gem_explanation helper + expand get_or_create defaults (score_breakdown, score_total, taste_vector_snapshot, explanation) + fix cached/race branch score_breakdown reads + fresh-branch JsonResponse explanation read (SCHEMA-02, SCHEMA-03, SCHEMA-04, EXPLAIN-01, EXPLAIN-02)
 
 **Wave 2** *(blocked on Wave 1 completion — both plans modify views.py)*
 - [ ] 07-02-PLAN.md — Non-fatal was_saved update in add_track_to_liked + compound_hit_rate computation and response key in get_recommendation_metrics (METRIC-02)
