@@ -64,6 +64,15 @@ Recommend one song per day that the user genuinely discovers — not a song they
 - ✓ OAUTHLIB_INSECURE_TRANSPORT production guard added (Phase 5 review)
 - ✓ Raw str(e) exception leaks plugged across all 14 handlers (Phase 5 review)
 
+### Validated in Phase 6 (Schema Migration — 2026-05-14)
+
+- ✓ `DailyGem.score_breakdown` (JSONField, default=dict) added — score persistence foundation (SCHEMA-01)
+- ✓ `DailyGem.score_total` (FloatField, null/blank) added — denormalized score for metrics queries (SCHEMA-01)
+- ✓ `DailyGem.was_saved` (BooleanField, null/blank) added — compound success metric signal (METRIC-01)
+- ✓ `DailyGem.taste_vector_snapshot` (JSONField, null/blank) added — recommendation model state capture (SCHEMA-01)
+- ✓ Migration 0008 auto-generated and applied; `makemigrations --check` clean; 113 tests pass, zero regressions
+- ✓ ORM round-trip tests (10 methods in `TestDailyGemNewFields`) validate all 4 new columns
+
 ### Active (v1.1 target)
 
 - [ ] "Why this gem" score breakdown in UI — genre match %, novelty score, feedback multiplier contribution
