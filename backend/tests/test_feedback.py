@@ -199,3 +199,99 @@ class TestDailyGemWasLikedSync(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.gem.refresh_from_db()
         self.assertIsNone(self.gem.was_liked)
+
+
+class TestDailyGemNewFields(TestCase):
+    """
+    Phase 6 Plan 02: ORM round-trip tests for the four new DailyGem fields
+    added in migration 0008 (score_breakdown, score_total, was_saved,
+    taste_vector_snapshot). Verifies Phase 6 success criteria #2 and #3.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user('newfieldsuser', password='pw')
+        self.track = Track.objects.create(
+            spotify_id='C' * 22,
+            name='New Fields Track',
+            artist='Artist',
+            album='Album',
+        )
+        self.gem = DailyGem.objects.create(
+            user=self.user,
+            date=date.today(),
+            track=self.track,
+        )
+
+    # --- score_breakdown ---
+
+    def test_score_breakdown_defaults_to_empty_dict(self):
+        """Fresh DailyGem.score_breakdown is {} (empty dict), NOT None (default=dict callable)."""
+        self.gem.refresh_from_db()
+        self.assertIsNotNone(self.gem.score_breakdown)
+        self.assertEqual(self.gem.score_breakdown, {})
+
+    def test_score_breakdown_round_trips(self):
+        """score_breakdown stores and retrieves a dict with nested float values."""
+        self.gem.score_breakdown = {'familiarity': 0.8, 'novelty': 0.6}
+        self.gem.save(update_fields=['score_breakdown'])
+        self.gem.refresh_from_db()
+        self.assertEqual(self.gem.score_breakdown['familiarity'], 0.8)
+
+    # --- score_total ---
+
+    def test_score_total_defaults_to_none(self):
+        """Fresh DailyGem.score_total is None (FloatField null=True, no default)."""
+        self.gem.refresh_from_db()
+        self.assertIsNone(self.gem.score_total)
+
+    def test_score_total_round_trips(self):
+        """score_total stores and retrieves a float value."""
+        self.gem.score_total = 0.75
+        self.gem.save(update_fields=['score_total'])
+        self.gem.refresh_from_db()
+        self.assertAlmostEqual(self.gem.score_total, 0.75)
+
+    # --- was_saved ---
+
+    def test_was_saved_defaults_to_none(self):
+        """Fresh DailyGem.was_saved is None (nullable BooleanField, three-state like was_liked)."""
+        self.gem.refresh_from_db()
+        self.assertIsNone(self.gem.was_saved)
+
+    def test_was_saved_accepts_true(self):
+        """was_saved=True (user saved the track) round-trips through DB."""
+        self.gem.was_saved = True
+        self.gem.save(update_fields=['was_saved'])
+        self.gem.refresh_from_db()
+        self.assertTrue(self.gem.was_saved)
+
+    def test_was_saved_accepts_false(self):
+        """was_saved=False (user explicitly did not save) round-trips; distinguishes False from None."""
+        self.gem.was_saved = False
+        self.gem.save(update_fields=['was_saved'])
+        self.gem.refresh_from_db()
+        self.assertFalse(self.gem.was_saved)
+        self.assertIsNotNone(self.gem.was_saved)
+
+    def test_was_saved_accepts_none(self):
+        """was_saved can be cleared back to None after being set (mirrors was_liked unlike pattern)."""
+        self.gem.was_saved = True
+        self.gem.save(update_fields=['was_saved'])
+        self.gem.was_saved = None
+        self.gem.save(update_fields=['was_saved'])
+        self.gem.refresh_from_db()
+        self.assertIsNone(self.gem.was_saved)
+
+    # --- taste_vector_snapshot ---
+
+    def test_taste_vector_snapshot_defaults_to_none(self):
+        """Fresh DailyGem.taste_vector_snapshot is None (JSONField null=True, no default)."""
+        self.gem.refresh_from_db()
+        self.assertIsNone(self.gem.taste_vector_snapshot)
+
+    def test_taste_vector_snapshot_round_trips(self):
+        """taste_vector_snapshot stores and retrieves a genre-weight dict."""
+        self.gem.taste_vector_snapshot = {'rock': 0.9, 'pop': 0.3, 'jazz': 0.1}
+        self.gem.save(update_fields=['taste_vector_snapshot'])
+        self.gem.refresh_from_db()
+        self.assertEqual(self.gem.taste_vector_snapshot['rock'], 0.9)
