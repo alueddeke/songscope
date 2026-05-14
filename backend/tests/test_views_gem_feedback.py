@@ -15,6 +15,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apps.core.models import Track, DailyGem, SpotifyToken, UserFeedback
+from apps.core.views import _build_gem_explanation
 
 
 # ---------------------------------------------------------------------------
@@ -228,3 +229,88 @@ class TestFeedbackInterpreterSingleton(TestCase):
         # Fetching interpreter again returns same object — cost persists
         interpreter2 = get_feedback_interpreter()
         self.assertEqual(interpreter2.rate_limiter.daily_cost, interpreter.rate_limiter.daily_cost)
+
+
+# ---------------------------------------------------------------------------
+# _build_gem_explanation — pure function tests
+# ---------------------------------------------------------------------------
+
+class TestBuildGemExplanation(TestCase):
+    """Tests for the _build_gem_explanation pure helper function."""
+
+    def test_genre_sim_dominant_contains_expected_substrings(self):
+        """genre_sim dominant: result contains '82%', 'via playlist mining', 'Matches your listening taste'."""
+        breakdown = {
+            'genre_sim': 0.82,
+            'novelty': 0.10,
+            'feedback_multiplier': 0.05,
+            'source': 'playlist mining',
+        }
+        result = _build_gem_explanation(breakdown, 'Track', 'Artist', 'playlist mining')
+        self.assertIn('82%', result)
+        self.assertIn('via playlist mining', result)
+        self.assertIn('Matches your listening taste', result)
+
+    def test_novelty_dominant_contains_expected_substrings(self):
+        """novelty dominant: result contains 'hidden gem' and 'via artist network'."""
+        breakdown = {
+            'genre_sim': 0.10,
+            'novelty': 0.90,
+            'feedback_multiplier': 0.05,
+            'source': 'artist network',
+        }
+        result = _build_gem_explanation(breakdown, 'Track', 'Artist', 'artist network')
+        self.assertIn('hidden gem', result)
+        self.assertIn('via artist network', result)
+
+    def test_feedback_multiplier_dominant_contains_expected_substrings(self):
+        """feedback_multiplier dominant: result contains \"You've liked\", artist name, 'via related artists'."""
+        breakdown = {
+            'genre_sim': 0.10,
+            'novelty': 0.20,
+            'feedback_multiplier': 0.90,
+            'source': 'related artists',
+        }
+        result = _build_gem_explanation(breakdown, 'Track', 'The Artist', 'related artists')
+        self.assertIn("You've liked", result)
+        self.assertIn('The Artist', result)
+        self.assertIn('via related artists', result)
+
+    def test_empty_breakdown_returns_fallback(self):
+        """Empty breakdown returns the literal fallback string."""
+        result = _build_gem_explanation({}, '', '', '')
+        self.assertEqual(result, 'Picked based on your listening patterns')
+
+    def test_all_zero_components_returns_fallback(self):
+        """All-zero breakdown returns the literal fallback string."""
+        breakdown = {
+            'genre_sim': 0.0,
+            'novelty': 0.0,
+            'feedback_multiplier': 0.0,
+            'source': 'fallback',
+        }
+        result = _build_gem_explanation(breakdown, 'Track', 'Artist', 'fallback')
+        self.assertEqual(result, 'Picked based on your listening patterns')
+
+    def test_missing_source_uses_discovery_fallback(self):
+        """Empty source string triggers 'via discovery' fallback."""
+        breakdown = {
+            'genre_sim': 0.5,
+            'novelty': 0.0,
+            'feedback_multiplier': 0.0,
+            'source': '',
+        }
+        result = _build_gem_explanation(breakdown, 'Track', 'Artist', '')
+        self.assertIn('via discovery', result)
+
+    def test_tie_breaking_is_deterministic_no_exception(self):
+        """Tied components do not raise exceptions; result is a non-empty string."""
+        breakdown = {
+            'genre_sim': 0.5,
+            'novelty': 0.5,
+            'feedback_multiplier': 0.5,
+            'source': 'playlist mining',
+        }
+        result = _build_gem_explanation(breakdown, 'Track', 'Artist', 'playlist mining')
+        self.assertIsInstance(result, str)
+        self.assertGreater(len(result), 0)
