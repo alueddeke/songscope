@@ -1021,6 +1021,64 @@ def get_artist_details(request, artist_id):
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 
+def _build_gem_explanation(breakdown: dict, track_name: str, artist_name: str, source: str) -> str:
+    """
+    Build a deterministic, human-readable explanation for why a gem was picked.
+
+    Pure function: no external calls, no logging, no exceptions on any reasonable input.
+    Returns one of four sentence shapes based on the dominant scoring component, or a
+    neutral fallback when the breakdown is empty or all-zero.
+
+    Args:
+        breakdown:    score_breakdown dict from _score_recommendations (may be empty)
+        track_name:   Spotify track name (unused in current sentences, retained for signature parity)
+        artist_name:  Spotify artist name (used in feedback_multiplier sentence)
+        source:       Discovery strategy label (e.g. 'playlist mining', 'artist network')
+
+    Returns:
+        Human-readable explanation string.
+    """
+    # --- Guard: empty or all-zero breakdown → neutral fallback -----------------
+    if not breakdown:
+        return 'Picked based on your listening patterns'
+
+    genre_sim = breakdown.get('genre_sim', 0.0)
+    novelty = breakdown.get('novelty', 0.0)
+    feedback_multiplier = breakdown.get('feedback_multiplier', 0.0)
+
+    if max(genre_sim, novelty, feedback_multiplier) == 0.0:
+        return 'Picked based on your listening patterns'
+
+    # --- Source string ---------------------------------------------------------
+    source_str = f'via {source}' if source else 'via discovery'
+
+    # --- Dominant component ---------------------------------------------------
+    components = {
+        'genre_sim': genre_sim,
+        'novelty': novelty,
+        'feedback_multiplier': feedback_multiplier,
+    }
+    dominant = max(components, key=components.get)
+
+    # --- Sentence shapes (D-02 / D-03 / D-04) ---------------------------------
+    if dominant == 'genre_sim':
+        pct = round(genre_sim * 100)
+        return (
+            f'Matches your listening taste — genre similarity: {pct}%, '
+            f'discovered {source_str}'
+        )
+    elif dominant == 'novelty':
+        return (
+            f'A hidden gem — low popularity score makes it a genuine discovery, '
+            f'found {source_str}'
+        )
+    else:  # feedback_multiplier
+        return (
+            f"You've liked {artist_name} before — that feedback boosted this pick, "
+            f'sourced {source_str}'
+        )
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_daily_gem(request):
