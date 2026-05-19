@@ -275,7 +275,7 @@ The same function also updates `source_stats` for the Thompson bandit — a like
 
 A good recommendation engine should not repeatedly suggest tracks from the same genre. Jaccard diversity measures how different the engine's recommendations are from each other, using set intersection and union on genre tags.
 
-For any pair of recommended tracks, Jaccard distance is `1 - |A ∩ B| / |A ∪ B|`: 0 means identical genre sets, 1 means completely disjoint. The overall diversity score is the mean pairwise Jaccard distance across all N*(N-1)/2 pairs in the recommendation history. A high diversity score alongside a high like-rate is strong evidence the engine is genuinely exploring the user's taste rather than overfitting to one genre.
+For any pair of recommended tracks, Jaccard distance is `1 - |A ∩ B| / |A ∪ B|`: 0 means identical genre sets, 1 means completely disjoint. The overall diversity score is the mean pairwise Jaccard distance computed over the 50 most recent non-empty genre lists (the implementation caps at 50 tracks to bound O(N²) computation; older tracks beyond the cap are excluded). A high diversity score alongside a high like-rate is strong evidence the engine is genuinely exploring the user's taste rather than overfitting to one genre.
 
 **Known limitation:** `Track.genres` is only populated when the user submits explicit feedback (like/dislike). Most historical DailyGem rows have empty genre lists, which means diversity is computed over a sparse subset of recommendations. This under-reports actual diversity and should be disclosed in an interview context.
 
@@ -285,6 +285,8 @@ For any pair of recommended tracks, Jaccard distance is `1 - |A ∩ B| / |A ∪ 
 J(A, B) = 1 - |A ∩ B| / |A ∪ B|
 
 diversity_score = mean( J(A_i, A_j) )  for all pairs (i, j), i < j
+                  over the 50 most recent non-empty genre lists (capped)
+                  → worst case: 50*49/2 = 1,225 pairs
 ```
 
 ### Code (in this codebase)
