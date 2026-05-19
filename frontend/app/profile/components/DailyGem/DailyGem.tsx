@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { get } from "../../../../services/axios";
 import FeedbackButtonGroup from "../Feedback/FeedbackButtonGroup";
+import ScoreBreakdown from "./ScoreBreakdown";
 import AIFeedbackInput from "../Feedback/AIFeedbackInput";
 import { AddToLiked } from "../AddToLiked/AddToLiked";
 import { AudioPlayer } from "../AudioPlayer/AudioPlayer";
@@ -21,6 +22,7 @@ interface GemTrack {
 interface DailyGemResponse {
   track: GemTrack;
   explanation: string;
+  score_breakdown: Record<string, number>;
   date: string;
   cached: boolean;
 }
@@ -88,7 +90,7 @@ export default function DailyGem() {
     );
   }
 
-  const { track, explanation, date } = gem;
+  const { track, explanation, date, score_breakdown } = gem;
   const pop = popularityLabel(track.popularity);
   const formattedDate = new Date(date + "T00:00:00").toLocaleDateString("en-US", {
     weekday: "long",
@@ -152,6 +154,9 @@ export default function DailyGem() {
             <p className="text-gray-300 italic text-sm leading-relaxed">{explanation}</p>
           </blockquote>
         )}
+
+        {/* Score breakdown */}
+        <ScoreBreakdown breakdown={score_breakdown ?? {}} />
 
         {/* Audio preview */}
         {track.preview_url && (
