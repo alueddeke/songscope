@@ -165,7 +165,7 @@ _Last updated: 2026-05-12_
 
 - [ ] **Phase 6: Schema Migration** — Add all new DailyGem fields in a single migration (score_breakdown, score_total, was_saved, taste_vector_snapshot)
 - [ ] **Phase 7: Backend Wiring** — Write score fields at recommendation time, fix all three cached-branch return sites, wire was_saved, expose compound hit rate
-- [ ] **Phase 8: Frontend Score Breakdown** — Render the three score bars and compound hit rate in the UI
+- [x] **Phase 8: Frontend Score Breakdown** — Render the three score bars and compound hit rate in the UI (completed 2026-05-19)
 - [ ] **Phase 9: Documentation Sync** — Update CONCEPTS.md and SYSTEM_DESIGN.md to reflect all v1.1 changes
 
 ---
@@ -220,7 +220,7 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 08-01-PLAN.md — Create ScoreBreakdown.tsx sub-component, wire it into DailyGem.tsx (interface + import + JSX between blockquote and audio preview), and swap Acceptance rate stat for Hit rate in MetricsStrip.tsx (EXPLAIN-03, METRIC-03)
+- [x] 08-01-PLAN.md — Create ScoreBreakdown.tsx sub-component, wire it into DailyGem.tsx (interface + import + JSX between blockquote and audio preview), and swap Acceptance rate stat for Hit rate in MetricsStrip.tsx (EXPLAIN-03, METRIC-03)
 
 ### Phase 9: Documentation Sync
 **Goal**: CONCEPTS.md and SYSTEM_DESIGN.md accurately reflect every v1.1 change so the codebase remains interview-ready
@@ -239,7 +239,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 6. Schema Migration | 2/2 | Complete | 2026-05-14 |
 | 7. Backend Wiring | 0/2 | Planned | - |
-| 8. Frontend Score Breakdown | 0/1 | Planned | - |
+| 8. Frontend Score Breakdown | 1/1 | Complete   | 2026-05-19 |
 | 9. Documentation Sync | 0/? | Not started | - |
 
 ---
