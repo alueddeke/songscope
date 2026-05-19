@@ -16,6 +16,7 @@ flowchart LR
         TasteProfileChart[TasteProfileChart]
         DiversityScore[DiversityScore]
         ImprovementStory[ImprovementStory]
+        ScoreBreakdown[ScoreBreakdown]
     end
 
     subgraph Backend
@@ -35,6 +36,7 @@ flowchart LR
     Profile --> ImprovementStory
 
     DailyGemUI -->|GET| GemView
+    DailyGemUI --> ScoreBreakdown
     MetricsStrip -->|GET| MetricsView
     LikeTrendChart -->|GET| TrendView
     TasteProfileChart -->|GET| MetricsView
@@ -126,6 +128,17 @@ Key invariants:
 - Renders "N/A" when `diversity_score` is null (fewer than 2 gems with genre data).
 - Known limitation: `Track.genres` is only populated on explicit feedback; most historical gems have empty genre lists, so this score under-reports actual genre diversity (Pitfall 1 from research).
 
+### ScoreBreakdown
+
+Client component. Reads the `score_breakdown` field from the `GET /api/daily-gem/` response (passed as a prop from `DailyGemUI`) and renders three horizontal progress bars: Genre Match (`genre_sim`), Novelty (`novelty`), and Feedback (`feedback_multiplier`). Bar width is `Math.round(raw * 100 / 5) * 5` — rounded to the nearest 5% for visual cleanliness.
+
+Source: `frontend/app/profile/components/DailyGem/ScoreBreakdown.tsx`
+
+Key invariants:
+- `score_breakdown` is returned in the `GET /api/daily-gem/` response for both cached and fresh gems. For cached gems it is read from the persisted `DailyGem.score_breakdown` column; for fresh gems it comes from `_score_recommendations()` and is simultaneously written to the DB.
+- The component receives `score_breakdown` as a prop — it does not make an additional API call.
+- Each raw float (0–1 range) is multiplied by 100 then rounded to the nearest 5 before rendering as a percentage width.
+
 ### Recommendation Engine (hybrid)
 
 The core ML service. Generates candidate tracks from 5 independent strategies, scores them using the compound formula, and applies Thompson Sampling source weights. Returns a ranked list; the top candidate becomes today's DailyGem.
@@ -183,7 +196,7 @@ All user state is stored in Django ORM models:
 |-------|-----------|---------|
 | `User` | Django built-in | Authentication identity |
 | `UserProfile` | `data` (JSONField) | `taste_vector`, `source_stats`, `base_data`, `preferences` |
-| `DailyGem` | `user`, `track`, `date`, `was_liked`, `track_popularity` | One gem per user per day; source of truth for metrics |
+| `DailyGem` | `user`, `track`, `date`, `was_liked`, `track_popularity`, `score_breakdown` (JSONField, default={}), `score_total` (FloatField, nullable), `was_saved` (BooleanField, nullable), `taste_vector_snapshot` (JSONField, nullable), `was_skipped` (BooleanField, default=False — not yet wired) | One gem per user per day; source of truth for metrics. `score_breakdown` stores the three scoring components at gem creation time. `score_total` is the composite score. `was_saved` is set to True when the user saves the track to Spotify (independent of `was_liked`). `taste_vector_snapshot` captures the user's taste vector at recommendation time for offline evaluation — enables comparing what the model "knew" then against eventual feedback without reconstructing historical state. `was_skipped` exists in the model but is not yet wired to any view (reserved for a future skip-signal feedback loop). |
 | `RecommendationLog` | `user`, `track`, `source`, `recommended_at`, `was_novel` | Audit trail for all candidates surfaced |
 | `Track` | `spotify_id`, `name`, `artist`, `genres`, `popularity` | Cached track metadata; `genres` only populated on feedback |
 
@@ -210,7 +223,7 @@ Key invariants:
 | GET | `/api/personalization-summary/` | `get_personalization_summary` | Session | taste_vector + preference summary | 2/3 |
 | GET | `/api/recommendation-metrics/` | `get_recommendation_metrics` | Session | On-the-fly metrics: acceptance rate, diversity, improvement story, top genres | 4 |
 | GET | `/api/recommendation-trend/` | `get_recommendation_trend` | Session | Rolling 7-day like-rate time series | 4 |
-| POST | `/api/add-track-to-liked/` | `add_track_to_liked` | Session | Save track to Spotify liked songs | 4 |
+| POST | `/api/add-track-to-liked/` | `add_track_to_liked` | Session | Save track to Spotify liked songs via `sp.current_user_saved_tracks_add()`. Side-effect: calls `DailyGem.objects.filter(user, date=today, track__spotify_id=track_id).update(was_saved=True)` so that `was_saved` can become `True` independently of `was_liked`. This enables OR-semantics in `compound_hit_rate`. | 4 |
 
 All authenticated endpoints use Django session cookies (`sessionid`). There is no JWT or Bearer token layer.
 
@@ -228,11 +241,12 @@ Step-by-step sequence when a user opens `/profile`:
 6. Five candidate strategies (`playlist_mining`, `artist_network`, `genre_search`, `related_artists`, `contextual`) each fetch a pool of tracks. Candidates are merged and deduplicated.
 7. `_filter_out_liked_songs()` removes tracks already in `RecommendationLog` or `DailyGem` for this user.
 8. `_score_recommendations()` applies `0.4 * genre_sim + 0.3 * novelty + 0.3 * feedback_multiplier` then multiplies by the Thompson-sampled source weight.
-9. Top-ranked candidate is saved as a `DailyGem` row and a `RecommendationLog` row (for future metric computation). Response returned to the frontend.
-10. User sees the gem card and clicks thumbs-up or thumbs-down.
-11. `DailyGemUI` posts `POST /api/submit-feedback/` with `{track_id, feedback_type}`.
-12. `submit_feedback` calls `personalization_engine.apply_feedback_learning(feedback)`, which updates `UserProfile.data['taste_vector']` and `UserProfile.data['source_stats']` in a single DB write.
-13. `MetricsStrip`, `LikeTrendChart`, `TasteProfileChart`, `DiversityScore`, and `ImprovementStory` silently re-fetch their data on the user's next page load.
+9. The top-ranked candidate's `score_breakdown` dict (`{genre_sim, novelty, feedback_multiplier, source}`) is passed to `_build_gem_explanation(breakdown, track_name, artist_name, source)`. This pure helper function inspects the three numeric components, identifies the dominant one (`argmax`), and returns a fixed sentence from one of four templates. No external call is made; the same breakdown always produces the same sentence. The result is stored as `DailyGem.explanation`.
+10. Top-ranked candidate is saved as a `DailyGem` row (with `score_breakdown`, `score_total`, `explanation`, and `taste_vector_snapshot` populated) and a `RecommendationLog` row. The response to the frontend includes the `score_breakdown` dict so the `ScoreBreakdown` component can render the three bar values without a separate API call.
+11. User sees the gem card and clicks thumbs-up or thumbs-down.
+12. `DailyGemUI` posts `POST /api/submit-feedback/` with `{track_id, feedback_type}`.
+13. `submit_feedback` calls `personalization_engine.apply_feedback_learning(feedback)`, which updates `UserProfile.data['taste_vector']` and `UserProfile.data['source_stats']` in a single DB write.
+14. `MetricsStrip`, `LikeTrendChart`, `TasteProfileChart`, `DiversityScore`, and `ImprovementStory` silently re-fetch their data on the user's next page load.
 
 ---
 
