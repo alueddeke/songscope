@@ -167,7 +167,7 @@ score = 0.4 * genre_sim + 0.3 * novelty + 0.3 * feedback_multiplier
 score *= source_weight  (Thompson Sampling, post-score multiplier)
 ```
 
-Source: `backend/apps/recommendations/hybrid_recommendation_engine.py`, line 878
+Source: `backend/apps/recommendations/hybrid_recommendation_engine.py`, line 883
 
 Key invariants:
 - Weights (0.4, 0.3, 0.3) are locked — not tunable via API or user preference.
@@ -182,7 +182,7 @@ Handles the online learning update on every like or dislike. Two simultaneous up
 1. **Taste vector SGD** — increments or decrements genre weights in `UserProfile.data['taste_vector']` by `TASTE_VECTOR_LR = 0.1`. Clamped to 0 on decrement.
 2. **Bandit update** — increments `source_stats[source]['s']` on like or `source_stats[source]['f']` on dislike, feeding the Thompson Sampling Beta posteriors.
 
-Source: `backend/apps/recommendations/personalization_engine.py`, `apply_feedback_learning()` lines 254–317
+Source: `backend/apps/recommendations/personalization_engine.py`, `apply_feedback_learning()` lines 254–324
 
 Key invariants:
 - No batch retraining — every feedback triggers an immediate DB write via `profile.save(update_fields=['data'])`.

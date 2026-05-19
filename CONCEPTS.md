@@ -36,7 +36,7 @@ where `A · B` is the dot product, `||·||` is the L2 norm, and the result is in
 ### Code (in this codebase)
 
 ```python
-# Source: backend/apps/recommendations/hybrid_recommendation_engine.py, lines 813-824
+# Source: backend/apps/recommendations/hybrid_recommendation_engine.py, lines 818-829
 def _cosine_similarity(self, vec_a: dict, vec_b: dict) -> float:
     """Cosine similarity between two genre count dicts. Returns 0.0 if either empty."""
     if not vec_a or not vec_b:
@@ -78,7 +78,7 @@ Cold-start defaults: `midpoint = 30`, `width = 20`. The score peaks at 1.0 when 
 ### Code (in this codebase)
 
 ```python
-# Source: backend/apps/recommendations/hybrid_recommendation_engine.py, lines 841-859
+# Source: backend/apps/recommendations/hybrid_recommendation_engine.py, lines 846-864
 # Bell-curve novelty: read preferred_popularity_range once before the loop.
 # Defaults: midpoint=30, width=20 (cold-start / no preference set).
 prefs = self.profile.data.get('preferences', {})
@@ -125,7 +125,7 @@ The `+1` prior on both parameters gives every new source a `Beta(1,1) = Uniform(
 ### Code (in this codebase)
 
 ```python
-# Source: backend/apps/recommendations/hybrid_recommendation_engine.py, lines 89-142
+# Source: backend/apps/recommendations/hybrid_recommendation_engine.py, lines 89-140
 def get_recommendation_weights(self) -> dict:
     """
     Thompson Sampling bandit for source weight selection.
@@ -398,7 +398,7 @@ where:
 ### Code (in this codebase)
 
 ```python
-# Source: backend/apps/recommendations/hybrid_recommendation_engine.py, lines 877-882
+# Source: backend/apps/recommendations/hybrid_recommendation_engine.py, lines 882-887
 # LOCKED formula — do not adjust weights
 rec['score'] = 0.4 * genre_sim + 0.3 * novelty + 0.3 * feedback_multiplier
 
