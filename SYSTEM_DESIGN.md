@@ -16,6 +16,7 @@ flowchart LR
         TasteProfileChart[TasteProfileChart]
         DiversityScore[DiversityScore]
         ImprovementStory[ImprovementStory]
+        ScoreBreakdown[ScoreBreakdown]
     end
 
     subgraph Backend
@@ -35,6 +36,7 @@ flowchart LR
     Profile --> ImprovementStory
 
     DailyGemUI -->|GET| GemView
+    DailyGemUI --> ScoreBreakdown
     MetricsStrip -->|GET| MetricsView
     LikeTrendChart -->|GET| TrendView
     TasteProfileChart -->|GET| MetricsView
@@ -183,7 +185,7 @@ All user state is stored in Django ORM models:
 |-------|-----------|---------|
 | `User` | Django built-in | Authentication identity |
 | `UserProfile` | `data` (JSONField) | `taste_vector`, `source_stats`, `base_data`, `preferences` |
-| `DailyGem` | `user`, `track`, `date`, `was_liked`, `track_popularity` | One gem per user per day; source of truth for metrics |
+| `DailyGem` | `user`, `track`, `date`, `was_liked`, `track_popularity`, `score_breakdown` (JSONField, default={}), `score_total` (FloatField, nullable), `was_saved` (BooleanField, nullable), `taste_vector_snapshot` (JSONField, nullable), `was_skipped` (BooleanField, default=False — not yet wired) | One gem per user per day; source of truth for metrics. `score_breakdown` stores the three scoring components at gem creation time. `score_total` is the composite score. `was_saved` is set to True when the user saves the track to Spotify (independent of `was_liked`). `taste_vector_snapshot` captures the user's taste vector at recommendation time for offline evaluation — enables comparing what the model "knew" then against eventual feedback without reconstructing historical state. `was_skipped` exists in the model but is not yet wired to any view (reserved for a future skip-signal feedback loop). |
 | `RecommendationLog` | `user`, `track`, `source`, `recommended_at`, `was_novel` | Audit trail for all candidates surfaced |
 | `Track` | `spotify_id`, `name`, `artist`, `genres`, `popularity` | Cached track metadata; `genres` only populated on feedback |
 
