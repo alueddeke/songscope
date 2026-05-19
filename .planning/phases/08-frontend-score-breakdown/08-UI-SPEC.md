@@ -45,8 +45,8 @@ Declared values (must be multiples of 4):
 
 Exceptions:
 - Score bar rows: `gap-2` (8px) between label, bar, and percentage — matches the tight inline layout confirmed in wireframe
-- Score bar section container: `gap-3` (12px) between each of the 3 rows — tighter than `gap-4` to keep the trio visually grouped
-- Bar track height: `h-1.5` (6px) — intentionally below the 8px grid for a fine, data-viz feel (established pattern: FeedbackButton icon uses 18px non-grid height)
+- Score bar section container: `gap-2` (8px) between each of the 3 rows — keeps the trio visually grouped
+- Bar track height: `h-2` (8px) — minimum grid value; fine, data-viz bar with sufficient tap affordance
 
 _Source: 08-CONTEXT.md wireframe + DailyGem.tsx existing gap-6 section cadence_
 
@@ -63,7 +63,7 @@ _Source: 08-CONTEXT.md wireframe + DailyGem.tsx existing gap-6 section cadence_
 
 Phase-specific typography notes:
 - Score bar **labels** ("Genre Match", "Novelty", "Feedback"): `text-sm` 14px weight 400, `text-gray-300` — matches the explanation blockquote body text scale
-- Score bar **percentage values** ("75%", "60%", "20%"): `text-sm` 14px weight 600 (semibold), `text-gray-300` — slightly heavier than label to draw the eye to the number
+- Score bar **percentage values** ("75%", "60%", "20%"): `text-sm` 14px weight 700 (bold), `text-gray-300` — heavier than label to draw the eye to the number
 - MetricsStrip **"Hit rate"** stat value: `text-lg` 18px weight 700, `text-green` — identical to existing `<Stat>` component; no type change needed
 
 _Source: DailyGem.tsx (`text-sm`, `text-gray-300`, `italic`) + MetricsStrip.tsx (`text-lg font-bold text-green tabular-nums`) — pre-populated from codebase_
@@ -89,6 +89,8 @@ Accent reserved for:
 
 Score bar track (unfilled background): `bg-gray-800` — consistent with existing subtle container usage throughout the app.
 
+Primary focal point: the green bar fill width — communicates score magnitude at a glance.
+
 _Source: tailwind.config.ts + DailyGem.tsx + MetricsStrip.tsx — fully pre-populated from codebase_
 
 ---
@@ -113,11 +115,11 @@ interface ScoreBreakdownProps {
 - Render exactly 3 rows in this fixed order: Genre Match (`genre_sim`), Novelty (`novelty`), Feedback (`feedback_multiplier`)
 - Each row layout: `flex items-center gap-2` containing:
   - Label: `text-sm text-gray-300 w-28 flex-shrink-0` — left-anchored, fixed width to align bars
-  - Bar track: `flex-1 bg-gray-800 rounded-full h-1.5 overflow-hidden`
+  - Bar track: `flex-1 bg-gray-800 rounded-full h-2 overflow-hidden`
   - Bar fill: `bg-green rounded-full h-full` with `style={{ width: \`${roundedPct}%\` }}`
-  - Percentage: `text-sm font-semibold text-gray-300 w-9 text-right flex-shrink-0`
+  - Percentage: `text-sm font-bold text-gray-300 w-9 text-right flex-shrink-0`
 - Rounding formula: `Math.round(rawValue * 100 / 5) * 5` — rounds to nearest 5% per ROADMAP success criterion
-- Container: `flex flex-col gap-3` — wraps all 3 rows
+- Container: `flex flex-col gap-2` — wraps all 3 rows
 
 **Placement in DailyGem.tsx:** Directly after the `{explanation && <blockquote>}` block, before the `{track.preview_url && ...}` audio section.
 
