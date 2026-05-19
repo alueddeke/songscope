@@ -105,7 +105,7 @@ Implementation note: `width` is guarded against zero to prevent ZeroDivisionErro
 
 ### Intuition
 
-SongScope generates candidates from five distinct sources (playlist mining, artist network, genre search, related artists, contextual). Each source has a different track record for producing songs the user likes. The system needs to balance two goals: exploit the best-performing source and explore the others to discover whether they might outperform.
+SongScope generates candidates from four active sources (playlist mining, artist network, related artists, contextual). Each source has a different track record for producing songs the user likes. (`genre_search` is defined in `SOURCE_DEFAULTS` as a reserved slot for a planned future strategy but is not currently called in `get_recommendations()`.) The system needs to balance two goals: exploit the best-performing source and explore the others to discover whether they might outperform.
 
 Thompson Sampling solves this by maintaining a Beta distribution over the win rate of each source. When a source produces a liked track, its success count `s` increments; when it produces a skipped or disliked track, its failure count `f` increments. At recommendation time, a weight is sampled from `Beta(s+1, f+1)` for each source. Sources with more successes produce higher samples on average; sources with high uncertainty (few observations) have wider distributions and occasionally produce high samples — natural exploration.
 
@@ -116,7 +116,8 @@ Cold-start rule: a source with fewer than 3 total observations uses its static d
 ```
 theta_i ~ Beta(s_i + 1, f_i + 1)   for each source i
 weight_i = theta_i / max_j(theta_j)
-→ all 5 sources receive a weight in (0, 1]; no single source is selected
+→ all sources in SOURCE_DEFAULTS receive a weight in (0, 1]; no single source is selected
+  (4 active sources generate candidates; genre_search weight is computed but never applied)
 ```
 
 The `+1` prior on both parameters gives every new source a `Beta(1,1) = Uniform(0,1)` starting distribution — no source is assumed to be better or worse at the start.

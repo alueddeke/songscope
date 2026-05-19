@@ -48,7 +48,7 @@ flowchart LR
     UserNameView --> DB
 
     Spotify[Spotify API] -->|top_artists, saved_tracks, playlists| Candidates
-    Candidates -->|5 sources: playlist_mining, artist_network, genre_search, related_artists, contextual| Scorer
+    Candidates -->|4 sources: playlist_mining, artist_network, related_artists, contextual| Scorer
     Scorer -->|0.4*genre_sim + 0.3*novelty + 0.3*feedback_mult| Ranker
     Ranker -->|Thompson Sampling source weight| TopGem[Top Gem]
     TopGem -->|DailyGem row| DB
@@ -141,16 +141,17 @@ Key invariants:
 
 ### Recommendation Engine (hybrid)
 
-The core ML service. Generates candidate tracks from 5 independent strategies, scores them using the compound formula, and applies Thompson Sampling source weights. Returns a ranked list; the top candidate becomes today's DailyGem.
+The core ML service. Generates candidate tracks from 4 active strategies, scores them using the compound formula, and applies Thompson Sampling source weights. Returns a ranked list; the top candidate becomes today's DailyGem.
 
 Source: `backend/apps/recommendations/hybrid_recommendation_engine.py`
 
-Five candidate sources (verified strategy names):
+Four active candidate sources (verified strategy names called in `get_recommendations()`):
 - `playlist_mining` — scans user's playlists for unheard tracks
 - `artist_network` — explores artists similar to top artists
-- `genre_search` — searches by genre keywords derived from taste vector
 - `related_artists` — uses Spotify's related-artists graph
 - `contextual` — time-of-day and recent listening context signals
+
+Note: `genre_search` is defined in `SOURCE_DEFAULTS` (default weight 0.2) as a reserved slot for a planned future strategy but is not currently implemented or called.
 
 Key invariants:
 - Candidates are deduplicated before scoring.
@@ -238,7 +239,7 @@ Step-by-step sequence when a user opens `/profile`:
 3. Backend `get_daily_gem` checks `DailyGem.objects.filter(user=user, date=today)`. If a row exists, returns it immediately (idempotent).
 4. If no row exists, `HybridRecommendationEngine` is instantiated for the user.
 5. The engine calls `_update_profile_data()` to refresh `UserProfile.data['base_data']` from Spotify (top artists, saved tracks, playlists).
-6. Five candidate strategies (`playlist_mining`, `artist_network`, `genre_search`, `related_artists`, `contextual`) each fetch a pool of tracks. Candidates are merged and deduplicated.
+6. Four active candidate strategies (`playlist_mining`, `artist_network`, `related_artists`, `contextual`) each fetch a pool of tracks. Candidates are merged and deduplicated.
 7. `_filter_out_liked_songs()` removes tracks already in `RecommendationLog` or `DailyGem` for this user.
 8. `_score_recommendations()` applies `0.4 * genre_sim + 0.3 * novelty + 0.3 * feedback_multiplier` then multiplies by the Thompson-sampled source weight.
 9. The top-ranked candidate's `score_breakdown` dict (`{genre_sim, novelty, feedback_multiplier, source}`) is passed to `_build_gem_explanation(breakdown, track_name, artist_name, source)`. This pure helper function inspects the three numeric components, identifies the dominant one (`argmax`), and returns a fixed sentence from one of four templates. No external call is made; the same breakdown always produces the same sentence. The result is stored as `DailyGem.explanation`.
