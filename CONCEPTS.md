@@ -198,13 +198,18 @@ where:
     signal = -1  if feedback_type in (DISLIKE, SKIP)
     lr = TASTE_VECTOR_LR = 0.1
 
-Dislike update is clamped: taste_vector[g] = max(0.0, taste_vector[g] - lr)
+LIKE update is capped above:
+    taste_vector[g] = min(taste_vector[g] + lr, TASTE_VECTOR_MAX)
+    where TASTE_VECTOR_MAX = 5.0  (prevents unbounded growth from repeated like/unlike cycles)
+
+Dislike update is clamped below:
+    taste_vector[g] = max(0.0, taste_vector[g] - lr)
 ```
 
 ### Code (in this codebase)
 
 ```python
-# Source: backend/apps/recommendations/personalization_engine.py, lines 254-317
+# Source: backend/apps/recommendations/personalization_engine.py, lines 254-324
 def apply_feedback_learning(self, feedback: UserFeedback):
     """
     Update UserProfile.data['taste_vector'] based on new feedback.
@@ -225,9 +230,10 @@ def apply_feedback_learning(self, feedback: UserFeedback):
     profile = UserProfile.objects.get(user=self.user)
     taste_vector = profile.data.get('taste_vector', {})
 
+    TASTE_VECTOR_MAX = 5.0  # cap prevents unbounded growth from like/unlike cycles
     if feedback.feedback_type in ('LIKE', 'SAVE'):
         for genre in genres:
-            taste_vector[genre] = taste_vector.get(genre, 0.0) + TASTE_VECTOR_LR
+            taste_vector[genre] = min(taste_vector.get(genre, 0.0) + TASTE_VECTOR_LR, TASTE_VECTOR_MAX)
     elif feedback.feedback_type in ('DISLIKE', 'SKIP'):
         for genre in genres:
             taste_vector[genre] = max(0.0, taste_vector.get(genre, 0.0) - TASTE_VECTOR_LR)
@@ -235,6 +241,22 @@ def apply_feedback_learning(self, feedback: UserFeedback):
         return
 
     profile.data['taste_vector'] = taste_vector
+
+    # Update source_stats so Thompson bandit can learn which sources produce liked tracks.
+    # Source is read from the most recent RecommendationLog entry for this track.
+    from apps.core.models import RecommendationLog
+    log = RecommendationLog.objects.filter(
+        user=self.user, track=feedback.track
+    ).order_by('-recommended_at').first()
+    source = log.source if log and log.source else ''
+    if source:
+        source_stats = profile.data.setdefault('source_stats', {})
+        stats = source_stats.setdefault(source, {'s': 0, 'f': 0})
+        if feedback.feedback_type in ('LIKE', 'SAVE'):
+            stats['s'] = stats.get('s', 0) + 1
+        elif feedback.feedback_type in ('DISLIKE', 'SKIP'):
+            stats['f'] = stats.get('f', 0) + 1
+
     profile.save(update_fields=['data'])
 ```
 
