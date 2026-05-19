@@ -215,8 +215,12 @@ Plans:
   1. The gem card displays three labeled score bars (Genre Match, Novelty, Feedback Influence) with percentage values rounded to the nearest 5%, rendered from `score_breakdown` API data
   2. Gems with no score data (pre-migration rows) display a graceful empty state — no crash, no blank bars
   3. The MetricsStrip shows a "Hit Rate" tile sourced from `compound_hit_rate` alongside the existing gem acceptance rate
-**Plans**: TBD
+**Plans**: 1 plan
 **UI hint**: yes
+
+Plans:
+**Wave 1**
+- [ ] 08-01-PLAN.md — Create ScoreBreakdown.tsx sub-component, wire it into DailyGem.tsx (interface + import + JSX between blockquote and audio preview), and swap Acceptance rate stat for Hit rate in MetricsStrip.tsx (EXPLAIN-03, METRIC-03)
 
 ### Phase 9: Documentation Sync
 **Goal**: CONCEPTS.md and SYSTEM_DESIGN.md accurately reflect every v1.1 change so the codebase remains interview-ready
@@ -235,7 +239,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 6. Schema Migration | 2/2 | Complete | 2026-05-14 |
 | 7. Backend Wiring | 0/2 | Planned | - |
-| 8. Frontend Score Breakdown | 0/? | Not started | - |
+| 8. Frontend Score Breakdown | 0/1 | Planned | - |
 | 9. Documentation Sync | 0/? | Not started | - |
 
 ---
