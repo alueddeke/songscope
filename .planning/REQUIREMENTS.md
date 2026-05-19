@@ -26,8 +26,8 @@ _Created: 2026-05-13_
 
 ### Documentation
 
-- [ ] **DOCS-01**: `CONCEPTS.md` updated with: score breakdown persistence rationale, `taste_vector_snapshot` purpose (offline evaluation), compound metric definition (`OR` semantics and why)
-- [ ] **DOCS-02**: `SYSTEM_DESIGN.md` updated with new `DailyGem` fields, `_build_gem_explanation` data flow, and compound hit signal wiring diagram
+- [x] **DOCS-01**: `CONCEPTS.md` updated with: score breakdown persistence rationale, `taste_vector_snapshot` purpose (offline evaluation), compound metric definition (`OR` semantics and why)
+- [x] **DOCS-02**: `SYSTEM_DESIGN.md` updated with new `DailyGem` fields, `_build_gem_explanation` data flow, and compound hit signal wiring diagram
 
 ---
 
