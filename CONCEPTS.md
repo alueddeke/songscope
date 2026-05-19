@@ -115,8 +115,8 @@ Cold-start rule: a source with fewer than 3 total observations uses its static d
 
 ```
 theta_i ~ Beta(s_i + 1, f_i + 1)   for each source i
-selected source = argmax_i(theta_i)
-normalized weight_i = theta_i / sum(theta_j)
+weight_i = theta_i / max_j(theta_j)
+→ all 5 sources receive a weight in (0, 1]; no single source is selected
 ```
 
 The `+1` prior on both parameters gives every new source a `Beta(1,1) = Uniform(0,1)` starting distribution — no source is assumed to be better or worse at the start.
@@ -140,7 +140,8 @@ def get_recommendation_weights(self) -> dict:
 
     If source_stats is completely empty, return static defaults unchanged.
 
-    Returns a dict with all 5 source keys (normalized to sum to 1.0) plus
+    Returns a dict with all 5 source keys (normalized to max=1.0 so the best
+    source gets a 1.0 multiplier) plus
     a 'bandit_active' sentinel key set to True to signal Phase 3 is wired.
     """
     source_stats = self.profile.data.get('source_stats', {})
@@ -162,13 +163,12 @@ def get_recommendation_weights(self) -> dict:
                 stats.get('f', 0) + 1,
             )
 
-    total = sum(thetas.values())
-    if total == 0.0:
-        result = {source: 1.0 for source in SOURCE_DEFAULTS}
-        result['bandit_active'] = True
-        return result
-
-    result = {k: v / total for k, v in thetas.items()}
+    # Normalize to max=1.0 so the best source gets a 1.0 multiplier.
+    # Normalizing to sum=1.0 would make each weight ~0.2, penalizing warm
+    # sources relative to the cold-start 1.0 baseline — the bandit would
+    # work backwards.
+    max_weight = max(thetas.values()) or 1.0
+    result = {k: v / max_weight for k, v in thetas.items()}
     result['bandit_active'] = True
     return result
 ```
@@ -399,16 +399,21 @@ The explanation is produced by `_build_gem_explanation()`, a pure Python functio
 ### How It Works
 
 ```
-dominant = argmax({genre_sim, novelty, feedback_multiplier})
+source_str = f'via {source}' if source else 'via discovery'
+components = {genre_sim, novelty, feedback_multiplier}
+dominant = max(components, key=components.get)
 
-if dominant == genre_sim:
-    → "We think you'll love {track} by {artist} — it matches your taste in {source} tracks."
-if dominant == novelty:
-    → "{track} by {artist} is a hidden gem — popular enough to be good, underground enough to feel like a find."
-if dominant == feedback_multiplier:
-    → "You've liked {artist} before, so {track} seemed like a natural next pick."
-(fallback):
-    → "{track} by {artist} scored well across all three dimensions — genre fit, novelty, and your feedback history."
+# Empty or all-zero breakdown → fallback (early return at start of function)
+if not breakdown or all(v == 0.0 for v in components.values()):
+    → "Picked based on your listening patterns"
+
+if dominant == 'genre_sim':
+    pct = round(genre_sim * 100)
+    → f"Matches your listening taste — genre similarity: {pct}%, discovered {source_str}"
+elif dominant == 'novelty':
+    → f"A hidden gem — low popularity score makes it a genuine discovery, found {source_str}"
+else:  # feedback_multiplier
+    → f"You've liked {artist_name} before — that feedback boosted this pick, sourced {source_str}"
 ```
 
 The three sentence shapes are constants; there is no model inference step.

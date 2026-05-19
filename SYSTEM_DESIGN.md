@@ -185,7 +185,7 @@ Source: `backend/apps/recommendations/personalization_engine.py`, `apply_feedbac
 
 Key invariants:
 - No batch retraining — every feedback triggers an immediate DB write via `profile.save(update_fields=['data'])`.
-- If the track has no genre data, the taste-vector update is skipped (logged as a warning); the bandit update still fires if the source is known.
+- If the track has no genre data, both the taste-vector update and the bandit update are skipped — `apply_feedback_learning` returns early after logging a warning (`personalization_engine.py` line 275). Both updates require a non-empty genre list.
 - Unlike reversal (`remove_feedback_learning`) is implemented for the case where a user unlikes a previously liked track.
 
 ### Persistence Layer
