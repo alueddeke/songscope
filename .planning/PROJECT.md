@@ -73,6 +73,14 @@ Recommend one song per day that the user genuinely discovers — not a song they
 - ✓ Migration 0008 auto-generated and applied; `makemigrations --check` clean; 113 tests pass, zero regressions
 - ✓ ORM round-trip tests (10 methods in `TestDailyGemNewFields`) validate all 4 new columns
 
+### Validated in Phases 7–9 (Backend Wiring + UI + Docs — 2026-05-19)
+
+- ✓ Score breakdown persisted to `DailyGem.score_breakdown` on every recommendation (Phase 7)
+- ✓ Compound hit metric computed and logged (Phase 7)
+- ✓ Recommendation explanation text generated from actual score components (Phase 7)
+- ✓ Score breakdown UI displayed in frontend ScoreBreakdown component (Phase 8)
+- ✓ CONCEPTS.md and SYSTEM_DESIGN.md updated to reflect v1.1 implementation (Phase 9)
+
 ### Active (v1.1 target)
 
 - [ ] "Why this gem" score breakdown in UI — genre match %, novelty score, feedback multiplier contribution
@@ -155,4 +163,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-13 — Milestone v1.0 complete; v1.1 started*
+*Last updated: 2026-05-19 — Phase 9 complete; v1.1 milestone documentation synchronized*
