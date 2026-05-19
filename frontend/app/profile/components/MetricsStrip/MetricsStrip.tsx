@@ -12,6 +12,7 @@ interface Metrics {
   gem_liked: number;
   gem_disliked: number;
   gem_acceptance_rate: number | null;
+  compound_hit_rate: number | null;
   top_genres: string[];
   message?: string;
 }
@@ -53,9 +54,9 @@ export default function MetricsStrip() {
   if (fetchFailed) return <p className="text-gray-600 text-xs px-4 py-6">Stats unavailable</p>;
   if (!metrics || metrics.message) return null;
 
-  const acceptance =
-    metrics.gem_acceptance_rate !== null
-      ? `${Math.round(metrics.gem_acceptance_rate * 100)}%`
+  const hitRate =
+    metrics.compound_hit_rate != null
+      ? `${Math.round(metrics.compound_hit_rate * 100)}%`
       : "—";
 
   return (
@@ -64,7 +65,7 @@ export default function MetricsStrip() {
         <div className="flex flex-wrap gap-8">
           <Stat label="Gems shown" value={String(metrics.gem_total)} />
           <Stat label="Gems liked" value={String(metrics.gem_liked)} />
-          <Stat label="Acceptance rate" value={acceptance} />
+          <Stat label="Hit rate" value={hitRate} />
           <Stat label="Avg popularity" value={`${metrics.avg_popularity}/100`} />
           <Stat label="Hidden gem rate" value={`${Math.round(metrics.hidden_gem_rate * 100)}%`} />
         </div>
