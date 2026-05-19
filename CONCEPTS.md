@@ -299,7 +299,7 @@ SongScope operates in a single-user, one-recommendation-per-day setting, which l
 
 **Precision@k** — what fraction of the top-k recommendations are relevant? In SongScope's single-gem-per-day model, `k=1` always, so `precision@1 = 1` if the gem was liked, else `0`. Across all historical gems: `precision@k = gem_liked / gem_total` (the gem acceptance rate). This is the primary quality signal.
 
-**Serendipity** — a recommendation is serendipitous if it is both novel (the user did not expect it) and relevant (the user liked it). Formally: `serendipity ≈ novelty * relevance`. In the metrics endpoint this is approximated as `hidden_gem_rate` (tracks with popularity < 40 that were liked), though not decomposed explicitly.
+**Serendipity** — a recommendation is serendipitous if it is both novel (the user did not expect it) and relevant (the user liked it). Formally: `serendipity ≈ novelty * relevance`. In the metrics endpoint this is approximated as `hidden_gem_rate` (fraction of all recommended gems with popularity < 40, regardless of whether the user liked them). A more accurate serendipity proxy is `hidden_gem_rate * gem_acceptance_rate`, which combines underground reach with actual user acceptance.
 
 **Diversity** — mean pairwise Jaccard distance across all recommended tracks. Covered in detail in [Jaccard Diversity](#jaccard-diversity).
 
@@ -309,7 +309,7 @@ SongScope operates in a single-user, one-recommendation-per-day setting, which l
 
 ```
 precision@k      = liked_in_k / k                        (k=1 here → gem_liked / gem_total)
-serendipity      ≈ hidden_gem_rate                        (approx: popular < 40 and was_liked)
+serendipity      ≈ hidden_gem_rate                        (approx: popularity < 40, no was_liked filter)
 diversity        = mean pairwise Jaccard (see above)
 coverage         = unique_items_recommended / catalog_size
 ```
@@ -320,7 +320,7 @@ The `/api/recommendation-metrics/` endpoint in `backend/apps/core/views.py` (lin
 
 ```
 gem_acceptance_rate  → precision@1 aggregate
-hidden_gem_rate      → serendipity proxy (popularity < 40)
+hidden_gem_rate      → serendipity proxy (popularity < 40, no was_liked filter)
 diversity_score      → mean pairwise Jaccard
 improvement_story    → first_7_rate vs last_7_rate (learning signal, not an eval metric per se)
 ```
