@@ -1,16 +1,16 @@
 ---
 phase: 09-documentation-sync
-reviewed: 2026-05-19T00:00:00Z
+reviewed: 2026-05-19T12:00:00Z
 depth: standard
 files_reviewed: 2
 files_reviewed_list:
   - CONCEPTS.md
   - SYSTEM_DESIGN.md
 findings:
-  critical: 4
-  warning: 4
-  info: 1
-  total: 9
+  critical: 2
+  warning: 3
+  info: 0
+  total: 5
 status: issues_found
 ---
 
@@ -23,189 +23,127 @@ status: issues_found
 
 ## Summary
 
-Both documentation files were reviewed against the live source code in `backend/apps/recommendations/hybrid_recommendation_engine.py`, `backend/apps/recommendations/personalization_engine.py`, and `backend/apps/core/views.py`.
+Both documentation files were reviewed against live source code in `backend/apps/recommendations/hybrid_recommendation_engine.py`, `backend/apps/recommendations/personalization_engine.py`, and `backend/apps/core/views.py`.
 
-The docs are generally well-structured and cover the right concepts. However, four factual claims directly contradict live code behavior, which would cause an interviewer or engineer who reads the code to lose trust in both documents. Three of these are about Thompson Sampling — the normalization method, the code snippet, and the SYSTEM_DESIGN description — all describe sum-normalization when the actual code uses max-normalization. The fourth is about `get_daily_gem` returning an empty `score_breakdown` for cached gems, when the code actually returns the persisted value.
+The documents are substantially accurate and well-structured. Most algorithmic descriptions — cosine similarity, Thompson Sampling (formula, normalization, code snippet), novelty bell-curve, Jaccard distance, compound scoring formula, and gem explanation templates — match the implementation exactly. The previous review cycle (existing REVIEW.md) identified issues that have been correctly addressed in the current files.
 
-There are also four warnings: missing documentation of the taste-vector cap, stale template strings for `_build_gem_explanation`, a missing strategy in the five-source list, and an incorrect inline description in the `get_daily_gem` docstring inside `views.py` that SYSTEM_DESIGN.md echoes.
+Two factual errors remain. The more serious is a wrong description of how `hidden_gem_rate` is computed: CONCEPTS.md says it counts tracks with popularity < 40 **that were liked**, but the code counts all recommended tracks with popularity < 40 regardless of like status — a different metric. The second is that the `apply_feedback_learning` code snippet shown in CONCEPTS.md is a truncated, outdated version that omits the `TASTE_VECTOR_MAX` cap and the entire bandit `source_stats` update block, even though the paragraph immediately after the snippet says "the same function also updates `source_stats`."
+
+Three warnings cover: the undocumented 50-track cap on diversity computation (which also makes the O(N²) complexity claim in SYSTEM_DESIGN.md misleading), and the claim that five distinct candidate sources are active when `genre_search` is never called in `get_recommendations()`.
 
 ---
 
 ## Critical Issues
 
-### CR-01: Thompson Sampling normalization is documented as sum-to-1 but code uses max-normalization
+### CR-01: `hidden_gem_rate` described as requiring `was_liked=True` — code does not filter by like status
 
-**File:** `CONCEPTS.md:119-121`
+**File:** `CONCEPTS.md:302`
 
-**Issue:** The formula section states:
-```
-normalized weight_i = theta_i / sum(theta_j)
-```
-And the embedded code snippet (lines 148–174 of CONCEPTS.md) shows `result = {k: v / total for k, v in thetas.items()}` — sum normalization. The actual code at `hybrid_recommendation_engine.py:137-138` is:
+**Issue:** CONCEPTS.md describes the serendipity proxy as:
+> "In the metrics endpoint this is approximated as `hidden_gem_rate` (tracks with popularity < 40 **that were liked**)"
+
+The formula block at line 312 reinforces this: `serendipity ≈ hidden_gem_rate (approx: popular < 40 and was_liked)`.
+
+The actual implementation in `backend/apps/core/views.py:432-434` is:
 ```python
-max_weight = max(thetas.values()) or 1.0
-result = {k: v / max_weight for k, v in thetas.items()}
+hidden_gem_rate = round(
+    gems.filter(track_popularity__lt=40).count() / gem_total, 4
+)
 ```
-This is max-normalization (best source gets weight 1.0, all others get < 1.0). Sum-normalization would produce weights around 0.2 each, which the code's own comment at line 133 explicitly rejects as incorrect behavior ("penalizing warm sources relative to the cold-start 1.0 baseline"). The two normalizations have different semantics: max-normalization is a multiplier capped at 1.0; sum-normalization would dampen all sources together.
+There is no `was_liked` filter. `hidden_gem_rate` is the fraction of *all recommended gems* (liked or not, including those with `was_liked=None`) that had popularity below 40. It is a measure of how often the engine recommends underground tracks, not how often the user liked underground tracks. This is a meaningfully different metric: a high `hidden_gem_rate` with a low `gem_acceptance_rate` would indicate the engine recommends obscure tracks the user does not enjoy — the opposite of serendipity as documented.
 
-**Fix:** Update the formula block and embedded code snippet in CONCEPTS.md:
+**Fix:** Correct both the inline description (line 302) and the formula comment (line 312):
 ```
-max_theta = max(theta_i for all i)
-weight_i = theta_i / max_theta        (best source → 1.0 multiplier; others scaled proportionally)
-```
-Replace the code snippet to match the actual implementation at lines 133–140 of `hybrid_recommendation_engine.py`.
-
----
-
-### CR-02: Thompson Sampling formula claims "selected source = argmax" but the bandit weights ALL sources
-
-**File:** `CONCEPTS.md:117-119`
-
-**Issue:** The formula block states:
-```
-theta_i ~ Beta(s_i + 1, f_i + 1)   for each source i
-selected source = argmax_i(theta_i)
-normalized weight_i = theta_i / sum(theta_j)
-```
-The claim "selected source = argmax" implies a single source is chosen per request (winner-take-all). The actual behavior is different: `get_recommendation_weights()` returns a weight for every source, and `_score_recommendations()` at line 887 applies each source's weight as a post-score multiplier to every candidate from that source. No single source is selected; all five receive a weight between 0 and 1 that scales their candidates' scores. The "argmax" line is factually wrong and misrepresents the architecture.
-
-**Fix:** Replace the formula block to accurately describe the weight-multiplier approach:
-```
-theta_i ~ Beta(s_i + 1, f_i + 1)   for each source i
-weight_i = theta_i / max_j(theta_j)          (all sources weighted; best source gets 1.0)
-final_score(candidate) = base_score * weight_source(candidate)
+hidden_gem_rate = fraction of all recommended gems where track_popularity < 40
+                  (regardless of was_liked status — measures how often the engine
+                  recommends underground tracks, not user satisfaction with them)
+serendipity ≈ hidden_gem_rate * gem_acceptance_rate  (more accurate proxy)
 ```
 
 ---
 
-### CR-03: `_build_gem_explanation` sentence templates in CONCEPTS.md do not match actual code
+### CR-02: `apply_feedback_learning` code snippet in CONCEPTS.md is truncated and omits the TASTE_VECTOR_MAX cap and the entire bandit update block
 
-**File:** `CONCEPTS.md:403-413`
+**File:** `CONCEPTS.md:206-239`
 
-**Issue:** CONCEPTS.md documents these four sentence templates:
-```
-"We think you'll love {track} by {artist} — it matches your taste in {source} tracks."
-"{track} by {artist} is a hidden gem — popular enough to be good, underground enough to feel like a find."
-"You've liked {artist} before, so {track} seemed like a natural next pick."
-(fallback): "{track} by {artist} scored well across all three dimensions — genre fit, novelty, and your feedback history."
-```
-The actual templates in `views.py:1077-1092` are:
+**Issue:** The code snippet shown ends at `profile.save(update_fields=['data'])` after line 238. The actual function in `personalization_engine.py` has two significant differences that are invisible in the snippet:
+
+**1. Missing TASTE_VECTOR_MAX cap on LIKE updates (line 287-290):**
+The snippet shows:
 ```python
-# genre_sim dominant:
-f'Matches your listening taste — genre similarity: {pct}%, discovered {source_str}'
-# novelty dominant:
-'A hidden gem — low popularity score makes it a genuine discovery, found {source_str}'
-# feedback_multiplier dominant:
-f"You've liked {artist_name} before — that feedback boosted this pick, sourced {source_str}"
-# fallback (empty/zero breakdown):
-'Picked based on your listening patterns'
+taste_vector[genre] = taste_vector.get(genre, 0.0) + TASTE_VECTOR_LR
 ```
-The documented templates are entirely different from the actual strings. The genre-sim template additionally includes a numeric percentage that is absent from the documented version. The fallback template documented ("scored well across all three dimensions") does not exist in the code; the actual fallback is a single neutral sentence used only when `breakdown` is empty or all-zero. An interviewer who reads the code after reviewing these docs would immediately identify the discrepancy.
+The real code is:
+```python
+TASTE_VECTOR_MAX = 5.0  # cap prevents unbounded growth from like/unlike cycles
+taste_vector[genre] = min(taste_vector.get(genre, 0.0) + TASTE_VECTOR_LR, TASTE_VECTOR_MAX)
+```
+The formula section at line 194 also omits this cap, showing the LIKE update as unbounded.
 
-**Fix:** Replace the four template strings in CONCEPTS.md with the actual strings from `views.py:1077-1092`.
+**2. Missing bandit source_stats update block (lines 304-316):**
+The paragraph after the snippet (line 241) states "The same function also updates `source_stats` for the Thompson bandit — a like increments `s` for the source that produced the track, a dislike increments `f`." But the snippet itself does not show this code at all. A reader who copies the snippet would build a function that silently omits the bandit update and thereby breaks Thompson Sampling's feedback loop. The snippet contradicts the immediately following prose.
 
----
-
-### CR-04: SYSTEM_DESIGN.md claims cached `get_daily_gem` returns `score_breakdown: {}` — it returns the persisted value
-
-**File:** `SYSTEM_DESIGN.md:138-139`
-
-**Issue:** The ScoreBreakdown component invariant states:
-> "`score_breakdown` is returned in the `GET /api/daily-gem/` response for both cached and fresh gems. For cached gems it is read from the persisted `DailyGem.score_breakdown` column"
-
-This is internally inconsistent with the inline `get_daily_gem` view docstring at `views.py:1101-1102`, which says "returns it immediately with `score_breakdown: {}`". The *actual* cached branch code at `views.py:1131` returns `'score_breakdown': gem.score_breakdown`, which is the persisted JSONField value — not an empty dict.
-
-However, SYSTEM_DESIGN.md's ScoreBreakdown invariants correctly state the cached path reads from the persisted column. The problem is that the phrase "with `score_breakdown: {}`" is embedded in the view docstring inside `views.py` (not in SYSTEM_DESIGN.md directly) and SYSTEM_DESIGN.md's Data Flow section at step 10 says "the response to the frontend includes the `score_breakdown` dict" without distinguishing cached vs. fresh. The SYSTEM_DESIGN.md claim is ambiguous but the invariant block has the correct version. The larger risk is that the view's own docstring is wrong and could mislead future maintainers.
-
-**Fix:** Remove the "(we don't re-score cached gems)" note from `views.py:1102` and clarify it returns the persisted `score_breakdown`. In SYSTEM_DESIGN.md, ensure the Data Flow step 10 explicitly states the cached branch also returns the persisted `score_breakdown` (not `{}`).
+**Fix:** Update the code snippet to include both the `TASTE_VECTOR_MAX` cap and the `source_stats` block. Update the Formula section to add:
+```
+LIKE update is also capped above:
+    taste_vector[g] = min(taste_vector[g] + lr, TASTE_VECTOR_MAX)
+    where TASTE_VECTOR_MAX = 5.0
+```
 
 ---
 
 ## Warnings
 
-### WR-01: CONCEPTS.md Online Learning formula omits the `TASTE_VECTOR_MAX = 5.0` cap on LIKE updates
+### WR-01: Both documents list `genre_search` as an active candidate source — it is defined in SOURCE_DEFAULTS but never called
 
-**File:** `CONCEPTS.md:191-203`
+**File:** `CONCEPTS.md:108`, `SYSTEM_DESIGN.md:148-153`
 
-**Issue:** The documented SGD formula shows:
-```
-taste_vector[g] := taste_vector[g] + lr * signal
-```
-And the dislike clamp is documented (`max(0.0, ...)`), but the like path is shown as unbounded. The actual code at `personalization_engine.py:287-290` applies:
+**Issue:** CONCEPTS.md introduces Thompson Sampling with: "SongScope generates candidates from five distinct sources (playlist mining, artist network, **genre search**, related artists, contextual)." SYSTEM_DESIGN.md's Recommendation Engine component lists the same five verified strategy names.
+
+`get_recommendations()` in `hybrid_recommendation_engine.py` calls only four strategies:
+- Strategy 1: `_get_playlist_recommendations` → `playlist_mining`
+- Strategy 2: `_get_artist_network_recommendations` → `artist_network`
+- Strategy 3: `_get_contextual_recommendations` → `contextual`
+- Strategy 5 (comment says 5, no Strategy 4): `_get_related_artist_recommendations` → `related_artists`
+
+There is no call to any `genre_search` method. `genre_search` appears in `SOURCE_DEFAULTS` at line 38 but no candidate is ever tagged with `source='genre_search'` during normal operation. As a result, the Thompson bandit never accumulates `source_stats` for `genre_search`, and the claim of five active sources is factually incorrect — the system uses four.
+
+**Fix:** In both documents, change "five distinct sources" to "four active sources" and update the source lists. Add a note that `genre_search` is reserved in `SOURCE_DEFAULTS` for a planned future strategy.
+
+---
+
+### WR-02: Jaccard diversity formula says "all N*(N-1)/2 pairs" — implementation caps at 50 most recent tracks
+
+**File:** `CONCEPTS.md:255`, `CONCEPTS.md:264`
+
+**Issue:** CONCEPTS.md states: "The overall diversity score is the mean pairwise Jaccard distance across **all N*(N-1)/2 pairs** in the recommendation history."
+
+The actual code in `views.py:479`:
 ```python
-TASTE_VECTOR_MAX = 5.0
-taste_vector[genre] = min(taste_vector.get(genre, 0.0) + TASTE_VECTOR_LR, TASTE_VECTOR_MAX)
+sample = nonempty[-50:]  # cap at 50 most recent to avoid O(n²) blowup
+pairs = list(combinations(sample, 2))
 ```
-The cap prevents unbounded weight growth from repeated like/unlike cycles. This changes the algorithmic behavior: after 50 likes of the same genre, the taste vector is capped at 5.0 rather than 5.0 — which happens to be the same here — but more importantly, users cannot unlike their way below 0 and re-like back above the cap indefinitely. The cap is a design constraint that should be documented because it affects how interviewers evaluate the online learning claim.
+Only the 50 most recent non-empty genre lists are used. For a user with more than 50 liked/disliked tracks, older tracks are silently excluded from the diversity calculation. The documented formula and the implementation compute different things once the user has more than 50 feedback events.
 
-**Fix:** Add a line to the formula block:
+**Fix:** Update the formula description and the Known Limitation block to reflect the cap:
 ```
-LIKE update is clamped above: taste_vector[g] = min(taste_vector[g] + lr, TASTE_VECTOR_MAX)
-where TASTE_VECTOR_MAX = 5.0
+diversity_score = mean( J(A_i, A_j) )  for all pairs in the 50 most recent
+                  non-empty genre lists  (capped to avoid O(n²) growth)
 ```
-Also add a brief note in the Implementation Note paragraph explaining the cap and its rationale.
 
 ---
 
-### WR-02: SYSTEM_DESIGN.md and CONCEPTS.md list `genre_search` as a strategy — it exists in `SOURCE_DEFAULTS` but is never called in `get_recommendations()`
+### WR-03: SYSTEM_DESIGN.md Operational Constraints cites O(N²) with 66,000 pairs at 365 gems — the 50-track cap makes the actual worst case 1,225 pairs
 
-**File:** `SYSTEM_DESIGN.md:148-153` and `CONCEPTS.md:108`
+**File:** `SYSTEM_DESIGN.md:257`
 
-**Issue:** Both documents describe five candidate sources: `playlist_mining`, `artist_network`, `genre_search`, `related_artists`, `contextual`. The `SOURCE_DEFAULTS` constant in the engine confirms these five keys. However, `get_recommendations()` at lines 182–206 calls only:
-- Strategy 1: `_get_playlist_recommendations` (playlist_mining)
-- Strategy 2: `_get_artist_network_recommendations` (artist_network)
-- Strategy 3: `_get_contextual_recommendations` (contextual)
-- Strategy 5: `_get_related_artist_recommendations` (related_artists)
+**Issue:** The Operational Constraints section states:
+> "Jaccard diversity is O(N^2) in the number of gems. At 365 gems/year the full pairwise computation is ~66,000 pairs — acceptable, but worth caching at higher volumes."
 
-There is no Strategy 4 and no call to any `genre_search` method. The source label `genre_search` in `SOURCE_DEFAULTS` is never assigned to any candidate's `source` field during normal operation. This means Thompson Sampling accumulates no `source_stats` for `genre_search`, and CONCEPTS.md's claim that the system "generates candidates from five distinct sources" is factually incorrect — it uses four.
+Because the implementation caps at 50 tracks (`sample = nonempty[-50:]`), the actual maximum number of pairs is `50*49/2 = 1,225` — independent of how many total gems the user has. The 66,000-pair figure and the "at higher volumes" concern are both incorrect for the current implementation. An interviewer reading this after seeing the code would notice the discrepancy.
 
-**Fix:** In both documents, update the source list to reflect four active strategies. Note that `genre_search` is reserved in `SOURCE_DEFAULTS` but not yet implemented in `get_recommendations()`.
-
----
-
-### WR-03: SYSTEM_DESIGN.md Feedback Loop description says taste-vector update is skipped when no genre data, but bandit still fires — this is only partially correct
-
-**File:** `SYSTEM_DESIGN.md:187-189`
-
-**Issue:** The Feedback Loop invariants state:
-> "If the track has no genre data, the taste-vector update is skipped (logged as a warning); the bandit update still fires if the source is known."
-
-The actual code at `personalization_engine.py:268-275` returns early when genres are empty:
-```python
-if not genres:
-    logger.warning(...)
-    return
-```
-The `return` at line 275 exits `apply_feedback_learning` before the bandit update code at lines 305-316. The bandit update does NOT fire when genre data is absent — the entire function returns early. The SYSTEM_DESIGN.md claim that "the bandit update still fires" is incorrect.
-
-**Fix:** Update the invariant to:
-> "If the track has no genre data, both the taste-vector update and the bandit update are skipped (function returns early after logging a warning). Both updates require non-empty genre lists."
-
----
-
-### WR-04: SYSTEM_DESIGN.md Feedback Loop description says Thompson Sampling normalization is "normalized to sum to 1.0"
-
-**File:** `SYSTEM_DESIGN.md:181`
-
-**Issue:** The Scoring & Ranking section key invariants state:
-> "Weights (0.4, 0.3, 0.3) are locked — not tunable via API or user preference."
-> "`genre_sim` is cosine similarity between candidate artist genres and `UserProfile.data['taste_vector']`."
-
-These are accurate. However, the `get_recommendation_weights()` docstring comment at `hybrid_recommendation_engine.py:104` — which SYSTEM_DESIGN.md implicitly describes — says "normalized to sum to 1.0" in the method's own docstring, while the code normalizes to max=1.0. This mirrors CR-01 and WR is appropriate here because SYSTEM_DESIGN.md's Scoring & Ranking section references source weights as multipliers without specifying the normalization method, which is ambiguous but not outright false. The companion Feedback Loop section at line 181 also does not describe the normalization, so there is no direct false claim — but the Thompson Sampling method's behavior needs to be clear in SYSTEM_DESIGN.md for an accurate architecture description.
-
-**Fix:** In SYSTEM_DESIGN.md's Recommendation Engine component description, add a clarifying note that the Thompson Sampling source weights are normalized so the best-performing source receives a 1.0 multiplier (max-normalization), not sum-to-1.0.
-
----
-
-## Info
-
-### IN-01: CONCEPTS.md references `INTERVIEW_PREP_SONGSCOPE.md` — verify this file exists
-
-**File:** `CONCEPTS.md:3` and `CONCEPTS.md:469`
-
-**Issue:** Both the opening paragraph and the Further Reading section link to `INTERVIEW_PREP_SONGSCOPE.md`. This file is referenced as the primary interview Q&A companion document. If the file does not exist or is not in the root directory, the cross-reference is broken and the main documentation flow is interrupted.
-
-**Fix:** Confirm the file exists at the project root. If it does not, either remove the links or create the file.
+**Fix:** Update to reflect the bounded computation:
+> "Jaccard diversity iterates over the 50 most recently rated tracks (capped). Worst case is 50×49/2 = 1,225 pairs — negligible. If the cap were removed, it would be O(N²) in the number of tracks with genre data."
 
 ---
 
