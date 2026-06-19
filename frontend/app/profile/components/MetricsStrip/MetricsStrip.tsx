@@ -29,11 +29,9 @@ function Stat({ label, value }: { label: string; value: string }) {
 export default function MetricsStrip() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [fetchFailed, setFetchFailed] = useState(false);
 
-  const fetchMetrics = async (showRefreshing = false) => {
-    if (showRefreshing) setRefreshing(true);
+  const fetchMetrics = async () => {
     try {
       const data = await get<Metrics>("/api/recommendation-metrics/");
       setMetrics(data);
@@ -42,7 +40,6 @@ export default function MetricsStrip() {
       setFetchFailed(true);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -61,7 +58,7 @@ export default function MetricsStrip() {
 
   return (
     <div className="w-full border-t border-gray-800 py-6 px-4 md:px-8 lg:px-16">
-      <div className="flex flex-wrap gap-8 items-start justify-between">
+      <div className="flex flex-wrap gap-8 items-start">
         <div className="flex flex-wrap gap-8">
           <Stat label="Gems shown" value={String(metrics.gem_total)} />
           <Stat label="Gems liked" value={String(metrics.gem_liked)} />
@@ -85,14 +82,6 @@ export default function MetricsStrip() {
             </div>
           </div>
         )}
-
-        <button
-          onClick={() => fetchMetrics(true)}
-          disabled={refreshing}
-          className="text-gray-600 text-xs hover:text-gray-400 transition-colors self-start mt-1"
-        >
-          {refreshing ? "Refreshing…" : "Refresh stats"}
-        </button>
       </div>
     </div>
   );

@@ -80,7 +80,7 @@ const UserProfile = async () => {
             <LikeTrendChart />
           </div>
           <div>
-            <p className="text-xs text-gray-500 uppercase tracking-widest mb-4">Your taste profile</p>
+            <p className="text-xs text-gray-500 uppercase tracking-widest mb-4">Your genre taste profile</p>
             <TasteProfileChart />
           </div>
         </div>

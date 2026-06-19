@@ -35,11 +35,10 @@ const getArtistImage = (artist: Artist): string => {
   return artist.images?.[0]?.url || '/images/albums.png';
 };
 
-const getPopularityColor = (popularity: number): string => {
-  if (popularity >= 80) return 'text-green-400';
-  if (popularity >= 60) return 'text-yellow-400';
-  if (popularity >= 40) return 'text-orange-400';
-  return 'text-red-400';
+const getPopularityLabel = (popularity: number): { label: string; color: string } => {
+  if (popularity < 40) return { label: 'Hidden Gem', color: 'text-green' };
+  if (popularity < 70) return { label: 'Rising', color: 'text-yellow-400' };
+  return { label: 'Mainstream', color: 'text-gray-400' };
 };
 
 export default function TopArtists({ timeRange = '4 weeks' as TimeRange }: TopArtistsProps) {
@@ -80,7 +79,7 @@ export default function TopArtists({ timeRange = '4 weeks' as TimeRange }: TopAr
     setExpandedArtistData(null);
 
     try {
-      const data = await get(`/api/artist-details/${artistId}/`);
+      const data = await get<ArtistDetailsData>(`/api/artist-details/${artistId}/`);
       console.log('Artist details response:', data);
       setExpandedArtistData(data);
     } catch (err) {
@@ -136,6 +135,7 @@ export default function TopArtists({ timeRange = '4 weeks' as TimeRange }: TopAr
               const gridItems: JSX.Element[] = [];
               
               artists.forEach((artist, index) => {
+                const pop = getPopularityLabel(artist.popularity);
                 // Add the artist card
                 gridItems.push(
                   <div
@@ -155,7 +155,7 @@ export default function TopArtists({ timeRange = '4 weeks' as TimeRange }: TopAr
                       />
                       {/* Popularity Badge */}
                       <div className="absolute top-2 right-2 bg-black/70 rounded-full px-2 py-1">
-                        <TrendingUp className={`w-3 h-3 ${getPopularityColor(artist.popularity)}`} />
+                        <TrendingUp className={`w-3 h-3 ${pop.color}`} />
                       </div>
                       {/* Rank Badge */}
                       <div className="absolute top-2 left-2 bg-green text-black rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
@@ -171,8 +171,8 @@ export default function TopArtists({ timeRange = '4 weeks' as TimeRange }: TopAr
                       <div className="text-xs text-gray-400">
                         {artist.genres.slice(0, 2).join(', ')}
                       </div>
-                      <div className={`text-xs mt-1 ${getPopularityColor(artist.popularity)}`}>
-                        {artist.popularity}% popular
+                      <div className={`text-xs mt-1 ${pop.color}`}>
+                        {pop.label}
                       </div>
                     </div>
                   </div>
@@ -187,7 +187,7 @@ export default function TopArtists({ timeRange = '4 weeks' as TimeRange }: TopAr
                         expandedArtistId ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0'
                       }`}
                     >
-                      <div className="bg-gray-850 rounded-lg p-6 border border-gray-700 w-full">
+                      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 w-full">
                         {loadingArtistDetails ? (
                           <div className="text-center py-8">
                             <div className="text-white text-sm mb-2">Loading artist details...</div>
