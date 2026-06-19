@@ -39,15 +39,18 @@ export default function DailyGem() {
   const [error, setError] = useState<string | null>(null);
   const [showNewGemPrompt, setShowNewGemPrompt] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [aiSyncedFeedback, setAiSyncedFeedback] = useState<'LIKE' | 'DISLIKE' | null>(null);
 
   const fetchGem = async (forceNew = false) => {
     try {
       setLoading(true);
       setError(null);
       setShowNewGemPrompt(false);
+      setAiSyncedFeedback(null);
       const url = forceNew ? "/api/daily-gem/?force_new=true" : "/api/daily-gem/";
       const data = await get<DailyGemResponse>(url);
       setGem(data);
+      window.dispatchEvent(new CustomEvent('songscope:new-gem'));
     } catch (err) {
       setError("Could not load today's gem. Try refreshing.");
       console.error("DailyGem fetch error:", err);
@@ -186,6 +189,7 @@ export default function DailyGem() {
         <FeedbackButtonGroup
           trackId={track.id}
           onDislike={() => setShowNewGemPrompt(true)}
+          syncedFeedback={aiSyncedFeedback}
         />
 
         {/* Natural language feedback */}
@@ -193,7 +197,11 @@ export default function DailyGem() {
           <p className="text-gray-500 text-xs uppercase tracking-widest mb-3">Tell us more</p>
           <AIFeedbackInput
             trackId={track.id}
-            onFeedbackSubmitted={() => setShowFeedbackModal(true)}
+            onFeedbackSubmitted={(interpretation) => {
+              setShowFeedbackModal(true);
+              if (interpretation?.overall_sentiment === 'positive') setAiSyncedFeedback('LIKE');
+              else if (interpretation?.overall_sentiment === 'negative') setAiSyncedFeedback('DISLIKE');
+            }}
           />
         </div>
 
