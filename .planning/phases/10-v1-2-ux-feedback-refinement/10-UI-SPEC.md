@@ -1,10 +1,11 @@
 ---
 phase: 10
 slug: v1-2-ux-feedback-refinement
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-19
+reviewed_at: 2026-06-19
 ---
 
 # Phase 10 — UI Design Contract
@@ -71,12 +72,14 @@ Existing scale confirmed by direct inspection of MetricsStrip.tsx, TopArtists.ts
 
 | Role | Size | Tailwind Class | Weight | Weight Class | Line Height |
 |------|------|----------------|--------|--------------|-------------|
-| Display | 48px | text-5xl | 400 (normal) | font-normal | 1.2 |
 | Heading | 24px | text-2xl | 700 (bold) | font-bold | 1.2 |
-| Body | 14px | text-sm | 500 (medium) | font-medium | 1.5 |
-| Label / stat | 12px | text-xs | 400 (normal) | uppercase tracking-widest | 1.4 |
+| Stat | 18px | text-lg | 700 (bold) | font-bold | 1.2 |
+| Body | 14px | text-sm | 400 (normal) | font-normal | 1.5 |
+| Label | 12px | text-xs | 400 (normal) | uppercase tracking-widest | 1.4 |
 
-Stat values (Metrics strip large numbers) use: `text-lg font-bold text-green tabular-nums`
+Weights in use: **400 (normal)** and **700 (bold)** only.
+
+Stat row covers MetricsStrip large numbers: `text-lg font-bold text-green tabular-nums`.
 
 **No new type styles are introduced in Phase 10.** All changes use the existing scale above.
 
