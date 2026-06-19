@@ -37,7 +37,7 @@ _Phase 10_
 
 ### AI Feedback ↔ Thumbs Sync
 
-- [ ] **SYNC-01**: `ai_feedback_service.py` `_build_prompt` returns `overall_sentiment: "positive" | "negative" | "neutral" | null` as part of the structured JSON schema — one new field, all existing fields unchanged
+- [x] **SYNC-01**: `ai_feedback_service.py` `_build_prompt` returns `overall_sentiment: "positive" | "negative" | "neutral" | null` as part of the structured JSON schema — one new field, all existing fields unchanged
 - [ ] **SYNC-02**: `FeedbackButtonGroup.tsx` accepts a `syncedFeedback?: 'LIKE' | 'DISLIKE' | null` prop; when prop changes to a non-null value, `setSelectedFeedback` mirrors it (visual toggle only — no second API call to `/api/submit-feedback/`)
 - [ ] **SYNC-03**: `DailyGem.tsx` tracks `aiSyncedFeedback` state; `onFeedbackSubmitted` callback maps `overall_sentiment === 'positive'` → `'LIKE'`, `overall_sentiment === 'negative'` → `'DISLIKE'`, else `null`; passes as `syncedFeedback` prop to `FeedbackButtonGroup`
 

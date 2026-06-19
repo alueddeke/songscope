@@ -12,7 +12,7 @@
 
 Plans:
 **Wave 1** *(parallel — no file overlap)*
-- [ ] 10-01-PLAN.md — Backend overall_sentiment field: Wave-0 RED tests + _build_prompt schema/rule + _fallback_interpretation key (SYNC-01)
+- [x] 10-01-PLAN.md — Backend overall_sentiment field: Wave-0 RED tests + _build_prompt schema/rule + _fallback_interpretation key (SYNC-01)
 - [x] 10-02-PLAN.md — Profile UI quality fixes: remove Refresh button, semantic popularity labels, visible expanded panel, clearer subtitle (UI-01, UI-02, UI-03, UI-04)
 
 **Wave 2** *(blocked on 10-01 — consumes overall_sentiment contract)*
