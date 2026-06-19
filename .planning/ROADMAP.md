@@ -16,4 +16,4 @@ Plans:
 - [x] 10-02-PLAN.md — Profile UI quality fixes: remove Refresh button, semantic popularity labels, visible expanded panel, clearer subtitle (UI-01, UI-02, UI-03, UI-04)
 
 **Wave 2** *(blocked on 10-01 — consumes overall_sentiment contract)*
-- [ ] 10-03-PLAN.md — Feedback-loop wiring: syncedFeedback mirror, aiSyncedFeedback mapping + CustomEvent dispatch, ImprovementStory live-refresh listener (SYNC-02, SYNC-03, EVOLVE-01, EVOLVE-02)
+- [x] 10-03-PLAN.md — Feedback-loop wiring: syncedFeedback mirror, aiSyncedFeedback mapping + CustomEvent dispatch, ImprovementStory live-refresh listener (SYNC-02, SYNC-03, EVOLVE-01, EVOLVE-02)

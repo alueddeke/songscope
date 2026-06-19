@@ -38,13 +38,13 @@ _Phase 10_
 ### AI Feedback ↔ Thumbs Sync
 
 - [x] **SYNC-01**: `ai_feedback_service.py` `_build_prompt` returns `overall_sentiment: "positive" | "negative" | "neutral" | null` as part of the structured JSON schema — one new field, all existing fields unchanged
-- [ ] **SYNC-02**: `FeedbackButtonGroup.tsx` accepts a `syncedFeedback?: 'LIKE' | 'DISLIKE' | null` prop; when prop changes to a non-null value, `setSelectedFeedback` mirrors it (visual toggle only — no second API call to `/api/submit-feedback/`)
-- [ ] **SYNC-03**: `DailyGem.tsx` tracks `aiSyncedFeedback` state; `onFeedbackSubmitted` callback maps `overall_sentiment === 'positive'` → `'LIKE'`, `overall_sentiment === 'negative'` → `'DISLIKE'`, else `null`; passes as `syncedFeedback` prop to `FeedbackButtonGroup`
+- [x] **SYNC-02**: `FeedbackButtonGroup.tsx` accepts a `syncedFeedback?: 'LIKE' | 'DISLIKE' | null` prop; when prop changes to a non-null value, `setSelectedFeedback` mirrors it (visual toggle only — no second API call to `/api/submit-feedback/`)
+- [x] **SYNC-03**: `DailyGem.tsx` tracks `aiSyncedFeedback` state; `onFeedbackSubmitted` callback maps `overall_sentiment === 'positive'` → `'LIKE'`, `overall_sentiment === 'negative'` → `'DISLIKE'`, else `null`; passes as `syncedFeedback` prop to `FeedbackButtonGroup`
 
 ### Taste Evolution Live Refresh
 
-- [ ] **EVOLVE-01**: `DailyGem.tsx` dispatches `window.dispatchEvent(new CustomEvent('songscope:new-gem'))` after `setGem(data)` in `fetchGem` — fires on both initial load and `force_new` regeneration
-- [ ] **EVOLVE-02**: `ImprovementStory.tsx` adds a `useEffect` listener for `'songscope:new-gem'` that calls `fetchMetrics()` — cleans up listener on unmount; existing initial-load `useEffect` unchanged
+- [x] **EVOLVE-01**: `DailyGem.tsx` dispatches `window.dispatchEvent(new CustomEvent('songscope:new-gem'))` after `setGem(data)` in `fetchGem` — fires on both initial load and `force_new` regeneration
+- [x] **EVOLVE-02**: `ImprovementStory.tsx` adds a `useEffect` listener for `'songscope:new-gem'` that calls `fetchMetrics()` — cleans up listener on unmount; existing initial-load `useEffect` unchanged
 
 ### Profile UI Quality
 
