@@ -163,12 +163,14 @@ Return a JSON object with these fields (use null if not applicable):
     "familiarity_context": "already_heard" | "new_discovery" | null,
     "time_context": "morning" | "afternoon" | "evening" | "night" | null,
     "activity_context": "workout" | "relaxation" | "party" | "focus" | "driving" | null,
+    "overall_sentiment": "positive" | "negative" | "neutral" | null,
     "confidence": 0.0-1.0
 }}
 
 Rules:
 - If user says "this genre" or "this type of music" and Track genres are provided, populate specific_genres from the track genres.
 - If user says they already know/have heard the track but still like it, set familiarity_context to "already_heard".
+- Set overall_sentiment based on the general tone of the feedback: "positive" if the user is satisfied/happy, "negative" if dissatisfied, "neutral" if informational or mixed, null if unclear.
 - Only include fields clearly indicated in the feedback. Be conservative - if unsure, use null.
 """
     
@@ -190,6 +192,7 @@ Rules:
             "specific_genres": None,
             "time_context": None,
             "activity_context": None,
+            "overall_sentiment": None,
             "confidence": 0.3
         }
         
@@ -208,7 +211,12 @@ Rules:
             interpretation["energy_preference"] = "higher"
         elif any(word in user_text_lower for word in ["calm", "peaceful", "gentle"]):
             interpretation["energy_preference"] = "lower"
-        
+
+        if any(word in user_text_lower for word in ["love", "great", "amazing", "good", "like"]):
+            interpretation["overall_sentiment"] = "positive"
+        elif any(word in user_text_lower for word in ["hate", "don't like", "awful", "bad", "dislike", "not"]):
+            interpretation["overall_sentiment"] = "negative"
+
         return interpretation
 
 class RateLimitExceeded(Exception):
