@@ -13,7 +13,7 @@
 Plans:
 **Wave 1** *(parallel — no file overlap)*
 - [ ] 10-01-PLAN.md — Backend overall_sentiment field: Wave-0 RED tests + _build_prompt schema/rule + _fallback_interpretation key (SYNC-01)
-- [ ] 10-02-PLAN.md — Profile UI quality fixes: remove Refresh button, semantic popularity labels, visible expanded panel, clearer subtitle (UI-01, UI-02, UI-03, UI-04)
+- [x] 10-02-PLAN.md — Profile UI quality fixes: remove Refresh button, semantic popularity labels, visible expanded panel, clearer subtitle (UI-01, UI-02, UI-03, UI-04)
 
 **Wave 2** *(blocked on 10-01 — consumes overall_sentiment contract)*
 - [ ] 10-03-PLAN.md — Feedback-loop wiring: syncedFeedback mirror, aiSyncedFeedback mapping + CustomEvent dispatch, ImprovementStory live-refresh listener (SYNC-02, SYNC-03, EVOLVE-01, EVOLVE-02)

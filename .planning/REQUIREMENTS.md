@@ -48,10 +48,10 @@ _Phase 10_
 
 ### Profile UI Quality
 
-- [ ] **UI-01**: `MetricsStrip.tsx` — remove the manual "Refresh stats" button (lines ~89-95) and its `refreshing` / `setRefreshing` state; `fetchMetrics` signature simplified to `async () => void`; auto-load on mount unchanged
-- [ ] **UI-02**: `TopArtists.tsx` — replace `getPopularityColor` (green=high pop, red=low pop — semantically backwards for a hidden-gem app) with `getPopularityLabel` returning `{ label: 'Hidden Gem' | 'Rising' | 'Mainstream', color: 'text-green' | 'text-yellow-400' | 'text-gray-400' }` where Hidden Gem = popularity < 40 (green), Rising = 40–69 (yellow), Mainstream ≥ 70 (gray); replace `${artist.popularity}% popular` text with the label string
-- [ ] **UI-03**: `TopArtists.tsx` — replace `bg-gray-850` (non-existent Tailwind class → transparent background) with `bg-gray-800` in the expanded artist row container
-- [ ] **UI-04**: `profile/page.tsx` — refine section subtitle copy: "How your taste is evolving" section labels updated to "Like-rate trend (7-day rolling)" and "Your genre taste profile" for clarity
+- [x] **UI-01**: `MetricsStrip.tsx` — remove the manual "Refresh stats" button (lines ~89-95) and its `refreshing` / `setRefreshing` state; `fetchMetrics` signature simplified to `async () => void`; auto-load on mount unchanged
+- [x] **UI-02**: `TopArtists.tsx` — replace `getPopularityColor` (green=high pop, red=low pop — semantically backwards for a hidden-gem app) with `getPopularityLabel` returning `{ label: 'Hidden Gem' | 'Rising' | 'Mainstream', color: 'text-green' | 'text-yellow-400' | 'text-gray-400' }` where Hidden Gem = popularity < 40 (green), Rising = 40–69 (yellow), Mainstream ≥ 70 (gray); replace `${artist.popularity}% popular` text with the label string
+- [x] **UI-03**: `TopArtists.tsx` — replace `bg-gray-850` (non-existent Tailwind class → transparent background) with `bg-gray-800` in the expanded artist row container
+- [x] **UI-04**: `profile/page.tsx` — refine section subtitle copy: "How your taste is evolving" section labels updated to "Like-rate trend (7-day rolling)" and "Your genre taste profile" for clarity
 
 ---
 
