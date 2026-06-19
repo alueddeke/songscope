@@ -17,6 +17,7 @@ export function AddToLiked(props: AddToLikedProps) {
     try {
       await post<{ message: string }>("/api/add-track-to-liked/", { track_id });
       setLiked(true);
+      window.dispatchEvent(new CustomEvent('songscope:feedback-action'));
     } catch (err) {
       console.error("Failed to add track to liked:", err);
     } finally {

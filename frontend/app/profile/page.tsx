@@ -8,6 +8,7 @@ import LikeTrendChart from './components/LikeTrendChart/LikeTrendChart'
 import TasteProfileChart from './components/TasteProfileChart/TasteProfileChart'
 import DiversityScore from './components/DiversityScore/DiversityScore'
 import ImprovementStory from './components/ImprovementStory/ImprovementStory'
+import UserMenu from './components/UserMenu/UserMenu'
 
 async function getUserName() {
   const cookieStore = cookies()
@@ -44,7 +45,8 @@ const UserProfile = async () => {
   const userName = await getUserName()
 
   return (
-    <div className=" w-[100%] max-w-[1300px] mx-auto">
+    <div className="w-[100%] max-w-[1300px] mx-auto">
+      <UserMenu />
       <section className="min-h-screen flex flex-col justify-center gap-8 p-2 md:p-8 lg:p-16 relative text-center md:text-left">
         <div className="pb-16">
           <h1 className="text-green text-5xl">Welcome back, {userName}.</h1>

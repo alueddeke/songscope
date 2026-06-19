@@ -26,11 +26,23 @@ export default function LikeTrendChart() {
   const [data, setData] = useState<TrendPoint[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchData = () => {
     get<TrendResponse>("/api/recommendation-trend/")
       .then((r) => setData(r.data || []))
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchData();
+
+    const handler = () => setTimeout(fetchData, 500);
+    window.addEventListener('songscope:feedback-action', handler);
+    window.addEventListener('songscope:new-gem', handler);
+    return () => {
+      window.removeEventListener('songscope:feedback-action', handler);
+      window.removeEventListener('songscope:new-gem', handler);
+    };
   }, []);
 
   if (loading) {

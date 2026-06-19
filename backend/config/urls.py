@@ -53,4 +53,5 @@ urlpatterns = [
     path('api/recommendation-metrics/', views.get_recommendation_metrics, name='recommendation_metrics'),
     path('api/recommendation-trend/', views.get_recommendation_trend, name='recommendation_trend'),
     path('api/add-track-to-liked/', views.add_track_to_liked, name='add_track_to_liked'),
+    path('api/logout/', views.logout_view, name='logout'),
 ]

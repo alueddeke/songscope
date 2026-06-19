@@ -248,19 +248,39 @@ class HybridRecommendationEngine:
             # Filter out liked songs and recently played
             scored_recommendations = self._filter_out_liked_songs(scored_recommendations)
             scored_recommendations = self._filter_out_recently_played(scored_recommendations)
+
+            # discovery_mode: if the most recent AI feedback asked for unheard tracks,
+            # build a broader "known tracks" set and exclude those too.
+            known_ids_discovery: set = set()
+            ai_feedback_history = self.profile.data.get('preferences', {}).get('ai_feedback_history', [])
+            if ai_feedback_history:
+                last_familiarity = ai_feedback_history[-1].get('interpretation', {}).get('familiarity_context')
+                if last_familiarity == 'new_discovery':
+                    known_ids_discovery = self._build_known_tracks_set()
+                    before = len(scored_recommendations)
+                    scored_recommendations = [
+                        r for r in scored_recommendations if r.get('id') not in known_ids_discovery
+                    ]
+                    logger.info(
+                        f"discovery_mode: removed {before - len(scored_recommendations)} known tracks "
+                        f"({len(known_ids_discovery)} in known set), {len(scored_recommendations)} remain"
+                    )
+
             logger.info(f"After filtering, {len(scored_recommendations)} tracks remaining")
-            
+
             # Return top recommendations
             final_recommendations = scored_recommendations[:limit]
-            
+
             # If we don't have enough, get more from fallback
             if len(final_recommendations) < limit:
                 logger.info(f"Only have {len(final_recommendations)} recommendations, getting more from fallback...")
                 fallback_recs = self._get_fallback_recommendations(limit * 2)
-                
+
                 # Filter fallback recommendations too
                 fallback_recs = self._filter_out_liked_songs(fallback_recs)
                 fallback_recs = self._filter_out_recently_played(fallback_recs)
+                if known_ids_discovery:
+                    fallback_recs = [r for r in fallback_recs if r.get('id') not in known_ids_discovery]
                 
                 # Add fallback recommendations
                 for rec in fallback_recs:
@@ -809,6 +829,59 @@ class HybridRecommendationEngine:
         )
         return logged_ids | gemmed_ids
 
+    def _build_known_tracks_set(self) -> set:
+        """Build the fullest possible set of track IDs the user has heard.
+
+        Spotify's public API does not expose full listening history. This method
+        assembles the best approximation from four available endpoints:
+          - recently_played(50)   — last ~50 plays (~2 weeks)
+          - top_tracks long_term  — all-time top 50
+          - top_tracks medium_term — 6-month top 50
+          - saved_tracks(50)      — first 50 explicitly liked/saved songs
+
+        Each endpoint is fetched independently so one failure doesn't abort the rest.
+        Combined coverage: ~150-200 unique track IDs.
+        """
+        sp = self._get_spotify_client()
+        if not sp:
+            return set()
+
+        known_ids: set = set()
+
+        try:
+            recent = sp.current_user_recently_played(limit=50)
+            for item in recent.get('items', []):
+                known_ids.add(item['track']['id'])
+        except Exception as e:
+            logger.error(f"_build_known_tracks_set: recently_played failed: {e}")
+
+        try:
+            top_long = sp.current_user_top_tracks(limit=50, time_range='long_term')
+            for item in top_long.get('items', []):
+                known_ids.add(item['id'])
+        except Exception as e:
+            logger.error(f"_build_known_tracks_set: top_tracks long_term failed: {e}")
+
+        try:
+            top_med = sp.current_user_top_tracks(limit=50, time_range='medium_term')
+            for item in top_med.get('items', []):
+                known_ids.add(item['id'])
+        except Exception as e:
+            logger.error(f"_build_known_tracks_set: top_tracks medium_term failed: {e}")
+
+        try:
+            saved = sp.current_user_saved_tracks(limit=50)
+            for item in saved.get('items', []):
+                known_ids.add(item['track']['id'])
+        except Exception as e:
+            logger.error(f"_build_known_tracks_set: saved_tracks failed: {e}")
+
+        logger.info(
+            f"_build_known_tracks_set: {len(known_ids)} known track IDs "
+            f"(recently_played + top_tracks long/medium + saved_tracks)"
+        )
+        return known_ids
+
     def _remove_duplicates(self, recommendations: List[Dict]) -> List[Dict]:
         """Remove duplicate tracks based on track ID"""
         seen_ids = set()
@@ -1101,6 +1174,26 @@ class HybridRecommendationEngine:
     def add_feedback(self, track_id: str, feedback_type: str, track_info: Dict = None):
         """Add user feedback and update profile"""
         self.profile.add_feedback(track_id, feedback_type, track_info)
+
+        # Populate liked_artists / disliked_artists so _score_recommendations
+        # feedback_multiplier (1.5x / 0.5x) actually fires.
+        artist_name = (track_info or {}).get('artist')
+        if artist_name:
+            prefs = self.profile.data.setdefault('preferences', {})
+            liked = prefs.setdefault('liked_artists', [])
+            disliked = prefs.setdefault('disliked_artists', [])
+            if feedback_type == 'LIKE':
+                if artist_name not in liked:
+                    liked.append(artist_name)
+                if artist_name in disliked:
+                    disliked.remove(artist_name)
+            elif feedback_type == 'DISLIKE':
+                if artist_name not in disliked:
+                    disliked.append(artist_name)
+                if artist_name in liked:
+                    liked.remove(artist_name)
+            self.profile.save(update_fields=['data'])
+
         logger.info(f"Added feedback: {feedback_type} for track {track_id}")
     
     def remove_feedback(self, track_id: str):

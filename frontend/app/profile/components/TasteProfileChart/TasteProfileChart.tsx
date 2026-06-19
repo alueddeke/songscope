@@ -25,11 +25,23 @@ export default function TasteProfileChart() {
   const [data, setData] = useState<GenrePct[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchData = () => {
     get<MetricsResponse>("/api/recommendation-metrics/")
       .then((r) => setData(r.top_genres_pct || []))
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchData();
+
+    const handler = () => setTimeout(fetchData, 500);
+    window.addEventListener('songscope:feedback-action', handler);
+    window.addEventListener('songscope:new-gem', handler);
+    return () => {
+      window.removeEventListener('songscope:feedback-action', handler);
+      window.removeEventListener('songscope:new-gem', handler);
+    };
   }, []);
 
   if (loading) {

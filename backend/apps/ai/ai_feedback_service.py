@@ -204,6 +204,15 @@ Genre avoidance — "no X" / "without X" / "avoid X" / "not X" for any genre nam
 Genre preference — "more X" / "give me X" for any genre name:
   Set genre_preference: "prefer_genre" and specific_genres: [X]
 
+Familiarity / discovery:
+  "haven't heard", "never heard", "not heard before", "something new", "new to me",
+  "discover", "unfamiliar", "don't know it", "haven't listened to", "fresh",
+  "something I don't know", "new music", "undiscovered"
+    → familiarity_context: "new_discovery"
+  "already heard", "know this", "heard this before", "I've heard this",
+  "already know", "heard it already"
+    → familiarity_context: "already_heard"
+
 RULES:
 1. NEGATION: "no X", "without X", "avoid X", "not X", "don't want X" → extract X as avoidance.
    For a genre: genre_preference: "avoid_genre", specific_genres: [X].
@@ -215,6 +224,9 @@ RULES:
 4. GENRE CONTEXT: If user says "this genre" / "this type of music" and track genres are listed,
    populate specific_genres from those genres.
 5. FAMILIARITY: "already know this", "I've heard this before" → familiarity_context: "already_heard".
+   "haven't heard this", "something new", "discover" → familiarity_context: "new_discovery".
+   Both can co-exist with genre/artist preferences (e.g. "indie rock I haven't heard" → BOTH
+   genre_preference: "prefer_genre", specific_genres: ["indie rock"], AND familiarity_context: "new_discovery").
 6. SENTIMENT: positive if satisfied, negative if dissatisfied, neutral if informational/mixed.
 7. CONFIDENCE: 0.8-1.0 for explicit preferences, 0.5-0.7 for inferred, 0.3-0.4 if uncertain.
 
@@ -249,6 +261,15 @@ Empty-feedback baseline (use as template): {empty_json}"""
             "familiarity_context": None, "time_context": None, "activity_context": None,
             "overall_sentiment": "negative", "confidence": 0.95,
         })
+        ex4_out = json.dumps({
+            "tempo_preference": None, "mood_preference": None, "artist_preference": None,
+            "genre_preference": "prefer_genre", "energy_preference": None, "valence_preference": None,
+            "danceability_preference": None, "acousticness_preference": None,
+            "instrumentalness_preference": None, "specific_artists": None,
+            "specific_genres": ["indie rock"], "familiarity_context": "new_discovery",
+            "time_context": None, "activity_context": None, "overall_sentiment": "neutral",
+            "confidence": 0.95,
+        })
         return [
             {"role": "user", "content": 'Feedback: "I hate hearing vocals, give me something purely instrumental"'},
             {"role": "assistant", "content": ex1_out},
@@ -256,6 +277,8 @@ Empty-feedback baseline (use as template): {empty_json}"""
             {"role": "assistant", "content": ex2_out},
             {"role": "user", "content": 'Feedback: "No more ambient music, give me something with a beat and vocals"'},
             {"role": "assistant", "content": ex3_out},
+            {"role": "user", "content": 'Feedback: "Give me some indie rock I haven\'t heard before"'},
+            {"role": "assistant", "content": ex4_out},
         ]
 
     def _build_prompt(self, user_text: str, track_info: Dict = None) -> str:
@@ -346,6 +369,19 @@ Empty-feedback baseline (use as template): {empty_json}"""
             if candidate in _KNOWN_GENRES:
                 interpretation["genre_preference"] = "avoid_genre"
                 interpretation["specific_genres"] = [candidate]
+
+        # Familiarity / discovery
+        if any(w in user_text_lower for w in [
+            "haven't heard", "never heard", "not heard", "something new", "new to me",
+            "haven't listened", "don't know it", "undiscovered", "fresh music",
+            "new music", "discover", "unfamiliar",
+        ]):
+            interpretation["familiarity_context"] = "new_discovery"
+        elif any(w in user_text_lower for w in [
+            "already heard", "heard before", "heard this", "know this", "already know",
+            "i've heard",
+        ]):
+            interpretation["familiarity_context"] = "already_heard"
 
         # Sentiment
         if any(w in user_text_lower for w in ["love", "great", "amazing", "good", "like"]):

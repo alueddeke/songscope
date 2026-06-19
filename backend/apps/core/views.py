@@ -3,7 +3,7 @@ import os
 from django.shortcuts import redirect
 from django.conf import settings
 from django.http import JsonResponse
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
@@ -1272,3 +1272,10 @@ def get_daily_gem(request):
     except Exception as e:
         logger.error(f"Error in get_daily_gem: {str(e)}", exc_info=True)
         return JsonResponse({'error': 'Failed to generate daily gem'}, status=500)
+
+
+@api_view(['POST'])
+def logout_view(request):
+    """Clear Django session and log the user out."""
+    logout(request)
+    return JsonResponse({'status': 'ok'})

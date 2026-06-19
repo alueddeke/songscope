@@ -86,7 +86,8 @@ export default function AIFeedbackInput({ trackId, onFeedbackSubmitted }: AIFeed
       if (response.status === 'success' && response.interpretation) {
         setInterpretation(response.interpretation);
         onFeedbackSubmitted?.(response.interpretation);
-        
+        window.dispatchEvent(new CustomEvent('songscope:feedback-action'));
+
         // Clear input after successful submission
         setFeedbackText("");
         

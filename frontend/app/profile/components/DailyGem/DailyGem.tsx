@@ -38,6 +38,7 @@ export default function DailyGem() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewGemPrompt, setShowNewGemPrompt] = useState(false);
+  const [likePrompt, setLikePrompt] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [aiSyncedFeedback, setAiSyncedFeedback] = useState<'LIKE' | 'DISLIKE' | null>(null);
 
@@ -46,6 +47,7 @@ export default function DailyGem() {
       setLoading(true);
       setError(null);
       setShowNewGemPrompt(false);
+      setLikePrompt(false);
       setAiSyncedFeedback(null);
       const url = forceNew ? "/api/daily-gem/?force_new=true" : "/api/daily-gem/";
       const data = await get<DailyGemResponse>(url);
@@ -188,7 +190,8 @@ export default function DailyGem() {
 
         <FeedbackButtonGroup
           trackId={track.id}
-          onDislike={() => setShowNewGemPrompt(true)}
+          onDislike={() => { setShowNewGemPrompt(true); setLikePrompt(false); }}
+          onLike={() => { setLikePrompt(true); setShowNewGemPrompt(false); }}
           syncedFeedback={aiSyncedFeedback}
         />
 
@@ -205,7 +208,18 @@ export default function DailyGem() {
           />
         </div>
 
-        {/* Try another gem — shown after dislike or AI feedback */}
+        {/* Prompts after feedback */}
+        {likePrompt && (
+          <div className="pt-4 border-t border-gray-800 flex flex-col gap-2">
+            <p className="text-gray-400 text-sm">Glad you liked it. Want something similar?</p>
+            <button
+              onClick={() => { setLikePrompt(false); fetchGem(true); }}
+              className="bg-green text-black font-semibold rounded-full px-5 py-2 hover:scale-105 transition-transform text-sm w-fit"
+            >
+              Find me another
+            </button>
+          </div>
+        )}
         {showNewGemPrompt && (
           <div className="pt-4 border-t border-gray-800 flex flex-col gap-2">
             <p className="text-gray-400 text-sm">Not feeling this one?</p>

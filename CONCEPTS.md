@@ -12,8 +12,10 @@ This document is a technical reference for every algorithm and technique impleme
 6. [Recommendation Evaluation Metrics](#recommendation-evaluation-metrics)
 7. [Compound Success Metric](#compound-success-metric)
 8. [Gem Explanation (Template-Based, Deterministic)](#gem-explanation-template-based-deterministic)
-9. [Spotify API Deprecation Pivot](#spotify-api-deprecation-pivot)
-10. [Further Reading](#further-reading)
+9. [AI Feedback Interpretation (NL → Preference Schema)](#ai-feedback-interpretation-nl--preference-schema)
+10. [Discovery Mode (Known-Track Exclusion)](#discovery-mode-known-track-exclusion)
+11. [Spotify API Deprecation Pivot](#spotify-api-deprecation-pivot)
+12. [Further Reading](#further-reading)
 
 ---
 
@@ -395,6 +397,8 @@ where:
     feedback_multiplier = 1.5 if artist liked, 0.5 if artist disliked, 1.0 otherwise
 ```
 
+**`feedback_multiplier` wiring:** The multiplier reads `UserProfile.data['preferences']['liked_artists']` and `['disliked_artists']`. These lists are populated by `HybridRecommendationEngine.add_feedback()`, which appends the artist name on LIKE and removes it on DISLIKE (and vice versa). Prior to v1.2 Phase 10, `add_feedback` did not write to these preference lists, so the multiplier evaluated to 1.0 for every track regardless of feedback history — a silent no-op. The fix is in `hybrid_recommendation_engine.py`, `add_feedback()` lines 1174–1199.
+
 ### Code (in this codebase)
 
 ```python
@@ -472,6 +476,129 @@ def _build_gem_explanation(breakdown, track_name, artist_name, source) -> str:
 ### Interview Talking Point
 
 "The explanation field looks like it could be AI-generated — it reads as natural language. But it is a pure function: three `if` branches, four sentence templates, deterministic output. I made this choice deliberately. An LLM call at gem-retrieval time would add latency, a billing dependency, and a failure mode. The template approach is instant, free, and reproducible. The honest disclosure is that the sentences are formulaic — a future version could use a fine-tuned model if richer explanations mattered. For a portfolio system the deterministic version is strictly better."
+
+---
+
+## AI Feedback Interpretation (NL → Preference Schema)
+
+### Intuition
+
+When a user types free-text feedback ("give me something more upbeat", "no more ambient, I haven't heard this artist before"), SongScope needs to extract actionable preferences rather than discarding the signal. The `AIFeedbackService` in `backend/apps/ai/ai_feedback_service.py` sends the raw text to OpenAI (`gpt-4o-mini`) with a rigid JSON schema in the system prompt, returning a structured interpretation dict. If OpenAI is unavailable or returns malformed JSON, a deterministic keyword-matching fallback produces the same dict shape.
+
+The key design constraint: the JSON schema is the contract between the AI path and the frontend. Every key must exist in both paths (OpenAI and fallback) or the frontend will encounter `undefined` rather than `null`, which breaks equality checks.
+
+### Schema
+
+```json
+{
+  "tempo_preference": null | "faster" | "slower" | "steady",
+  "mood_preference": null | string,
+  "artist_preference": null | "similar_artist" | "different_artist",
+  "genre_preference": null | "prefer_genre" | "avoid_genre",
+  "energy_preference": null | "high" | "low",
+  "valence_preference": null | "positive" | "negative",
+  "danceability_preference": null | "high" | "low",
+  "acousticness_preference": null | "acoustic" | "electronic",
+  "instrumentalness_preference": null | "instrumental" | "vocal",
+  "specific_artists": null | [string, ...],
+  "specific_genres": null | [string, ...],
+  "familiarity_context": null | "new_discovery" | "already_heard",
+  "time_context": null | string,
+  "activity_context": null | string,
+  "overall_sentiment": null | "positive" | "negative" | "neutral",
+  "confidence": float (0.3–1.0)
+}
+```
+
+`overall_sentiment` captures whether the user is satisfied with recent recommendations (independent of specific preferences). `familiarity_context` captures whether the user is asking for unheard tracks (`new_discovery`) or expressing they know the current track (`already_heard`).
+
+### Fallback Path
+
+The `_fallback_interpretation()` method runs keyword matching on the raw text without any external call:
+
+```python
+# Familiarity
+if any(w in text for w in ["haven't heard", "something new", "discover", "unfamiliar"]):
+    interpretation["familiarity_context"] = "new_discovery"
+
+# Sentiment
+if any(w in text for w in ["love", "great", "amazing", "good", "like"]):
+    interpretation["overall_sentiment"] = "positive"
+elif any(w in text for w in ["hate", "awful", "bad", "dislike", "not"]):
+    interpretation["overall_sentiment"] = "negative"
+else:
+    interpretation["overall_sentiment"] = None  # explicit null, not "neutral"
+```
+
+Default is `None`, not `"neutral"` — absence of signal is an explicit null rather than a false assertion. This ensures the engine treats missing-sentiment identically to unprocessed feedback.
+
+### UI Wiring (overall_sentiment → Toggle Sync)
+
+`DailyGem.tsx` maps `interpretation.overall_sentiment` into local state:
+
+```
+"positive"   → setAiSyncedFeedback("LIKE")
+"negative"   → setAiSyncedFeedback("DISLIKE")
+null/neutral → no-op (toggle unchanged)
+```
+
+This `aiSyncedFeedback` state flows as a prop to `FeedbackButtonGroup`, which applies a null guard: `syncedFeedback != null` before mirroring. Crucially, the state is reset to `null` before each `fetchGem` call (D-01 reset-before-get), preventing prior-gem sentiment from re-syncing onto the new gem during the async fetch window.
+
+### Interview Talking Point
+
+"The fallback-parity constraint is the interesting engineering decision here. An LLM output schema is a trust boundary — you cannot guarantee key presence unless you enforce it explicitly. We guarantee it by requiring every key in `_build_prompt`'s JSON schema to have a corresponding key in `_fallback_interpretation`. The risk of skipping this: the frontend's `=== 'positive'` check silently evaluates `undefined === 'positive'` → `false` instead of `null === 'positive'` → `false`. Both are no-ops, but one hides a schema drift bug that becomes a data quality issue once you start persisting interpretations to the DB."
+
+---
+
+## Discovery Mode (Known-Track Exclusion)
+
+### Intuition
+
+When a user's AI feedback includes `familiarity_context: "new_discovery"` ("give me something I haven't heard"), the standard candidate pool assembled from the user's playlists and top artists still contains tracks the user already knows. The exclusion set from `RecommendationLog` and `DailyGem` only covers tracks the system has previously recommended — not the user's broader listening history outside the app.
+
+Discovery mode builds a broader "known tracks" set using four Spotify endpoints and filters it from candidates before scoring.
+
+### Implementation
+
+```python
+# Source: backend/apps/recommendations/hybrid_recommendation_engine.py
+
+def _build_known_tracks_set(self) -> set:
+    """
+    Assembles best approximation of user's listening history from available endpoints:
+      - recently_played(50)         → last ~50 plays (~2 weeks)
+      - top_tracks long_term(50)    → all-time top 50
+      - top_tracks medium_term(50)  → 6-month top 50
+      - saved_tracks(50)            → first 50 liked/saved songs
+    Each fetched independently — one failure doesn't abort the rest.
+    Combined coverage: ~150–200 unique track IDs.
+    """
+```
+
+Trigger logic in `get_recommendations()`:
+
+```python
+ai_feedback_history = self.profile.data.get('preferences', {}).get('ai_feedback_history', [])
+if ai_feedback_history:
+    last_familiarity = ai_feedback_history[-1].get('interpretation', {}).get('familiarity_context')
+    if last_familiarity == 'new_discovery':
+        known_ids = self._build_known_tracks_set()
+        scored_recommendations = [r for r in scored_recommendations if r.get('id') not in known_ids]
+```
+
+Only the most recent AI feedback entry is read (`[-1]`). If the user later submits feedback without any familiarity signal, `familiarity_context` is `None` and discovery mode does not fire.
+
+### Trade-offs
+
+**Coverage limitation:** Spotify's public API does not expose full playback history. The 4-endpoint assembly covers ~150–200 unique tracks. A user with 10,000 play history entries will still receive some "known" candidates that fall outside the API window. This is an honest limitation disclosed at the `logger.info` callsite.
+
+**Cost:** 4 extra Spotify API calls per gem request when discovery mode is active (lazily — only triggered by the familiarity signal, not every request). Each endpoint is O(50 items) — constant cost.
+
+**Fallback filter:** Discovery mode also applies to the fallback candidate path if the primary pool is too small after filtering.
+
+### Interview Talking Point
+
+"Discovery mode is an example of user intent extraction feeding directly into the retrieval step — not just scoring. Most recommendation systems handle 'novelty' as a scoring signal (the bell-curve novelty in our compound metric). But when the user explicitly says 'give me something I haven't heard', a scoring bonus for novelty is insufficient — a very popular known track can still outscore an unknown one. Filtering at retrieval guarantees the constraint. The engineering challenge is that Spotify doesn't expose full history, so we approximate with 4 endpoints covering ~200 tracks — good enough for a daily-gem use case where the user won't hear more than 365 recommendations per year."
 
 ---
 

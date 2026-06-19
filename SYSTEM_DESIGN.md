@@ -117,6 +117,7 @@ Source: `frontend/app/profile/components/ImprovementStory/ImprovementStory.tsx`
 Key invariants:
 - Renders "Not enough data" when `improvement_story.delta` is null (fewer than 2 gems).
 - Delta is displayed as `+N pp` or `-N pp` (percentage points), not a raw ratio.
+- **Live refresh (v1.2):** Listens for the `songscope:new-gem` CustomEvent dispatched by `DailyGem.tsx` on every gem fetch. On event, calls `fetchMetrics()` immediately — no page reload required. The event listener is added in a separate `useEffect` and cleaned up via `removeEventListener` on unmount to prevent listener accumulation. `fetchMetrics` is defined at component scope (not inside the effect) to avoid stale-closure bugs.
 
 ### DiversityScore
 
@@ -157,6 +158,7 @@ Key invariants:
 - Candidates are deduplicated before scoring.
 - Tracks already in `RecommendationLog` or `DailyGem` for this user are filtered out before returning.
 - Thompson Sampling source weights are computed once per request, not per candidate.
+- **Discovery mode (v1.2):** If the user's most recent AI feedback interpretation has `familiarity_context: "new_discovery"`, `_build_known_tracks_set()` assembles an approximate listening history from 4 Spotify endpoints (`recently_played`, `top_tracks long_term`, `top_tracks medium_term`, `saved_tracks`) yielding ~150–200 unique track IDs. These are excluded from candidates after the standard `RecommendationLog`/`DailyGem` filter step. The 4 API calls are made only when discovery mode is active. See [Discovery Mode](#discovery-mode-known-track-exclusion) in CONCEPTS.md.
 
 ### Scoring & Ranking
 
@@ -188,6 +190,7 @@ Key invariants:
 - No batch retraining — every feedback triggers an immediate DB write via `profile.save(update_fields=['data'])`.
 - If the track has no genre data, both the taste-vector update and the bandit update are skipped — `apply_feedback_learning` returns early after logging a warning (`personalization_engine.py` line 275). Both updates require a non-empty genre list.
 - Unlike reversal (`remove_feedback_learning`) is implemented for the case where a user unlikes a previously liked track.
+- **Feedback multiplier wiring (v1.2):** `HybridRecommendationEngine.add_feedback()` also writes `liked_artists` / `disliked_artists` into `UserProfile.data['preferences']`. This is what makes the scoring `feedback_multiplier` (1.5× / 0.5×) actually fire. On LIKE, the artist name is appended to `liked_artists` and removed from `disliked_artists`; on DISLIKE, the reverse. Without this write, the multiplier evaluated to 1.0 for every candidate regardless of feedback history.
 
 ### Persistence Layer
 
@@ -225,6 +228,7 @@ Key invariants:
 | GET | `/api/recommendation-metrics/` | `get_recommendation_metrics` | Session | On-the-fly metrics: acceptance rate, diversity, improvement story, top genres | 4 |
 | GET | `/api/recommendation-trend/` | `get_recommendation_trend` | Session | Rolling 7-day like-rate time series | 4 |
 | POST | `/api/add-track-to-liked/` | `add_track_to_liked` | Session | Save track to Spotify liked songs via `sp.current_user_saved_tracks_add()`. Side-effect: calls `DailyGem.objects.filter(user, date=today, track__spotify_id=track_id).update(was_saved=True)` so that `was_saved` can become `True` independently of `was_liked`. This enables OR-semantics in `compound_hit_rate`. | 4 |
+| POST | `/api/logout/` | `logout_view` | Session | Clear Django session and log out. Returns `{"status": "ok"}`. | 10 |
 
 All authenticated endpoints use Django session cookies (`sessionid`). There is no JWT or Bearer token layer.
 
@@ -247,7 +251,7 @@ Step-by-step sequence when a user opens `/profile`:
 11. User sees the gem card and clicks thumbs-up or thumbs-down.
 12. `DailyGemUI` posts `POST /api/submit-feedback/` with `{track_id, feedback_type}`.
 13. `submit_feedback` calls `personalization_engine.apply_feedback_learning(feedback)`, which updates `UserProfile.data['taste_vector']` and `UserProfile.data['source_stats']` in a single DB write.
-14. `MetricsStrip`, `LikeTrendChart`, `TasteProfileChart`, `DiversityScore`, and `ImprovementStory` silently re-fetch their data on the user's next page load.
+14. `MetricsStrip`, `LikeTrendChart`, `TasteProfileChart`, and `DiversityScore` re-fetch on the user's next page load. `ImprovementStory` live-refreshes: after step 10, `DailyGem.tsx` dispatches a `songscope:new-gem` CustomEvent on the `window`; `ImprovementStory`'s event listener calls `fetchMetrics()` immediately, so the improvement delta updates in the same session without a page reload.
 
 ---
 
