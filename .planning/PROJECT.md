@@ -1,14 +1,16 @@
 # SongScope
 
-## Current Milestone: v1.1 Explainability + Feedback Loop Closure
+## Current Milestone: v1.2 Feedback-Driven Recommendation Refinement
 
-**Goal:** Surface why each recommendation was chosen and close the feedback loop with a real compound success metric.
+**Goal:** Every piece of user feedback meaningfully improves future song suggestions via full-cascade filtering, while taste evolution stats update live and the profile UI communicates clearly what it's showing.
 
 **Target features:**
-- "Why this gem" score breakdown in UI (genre match %, novelty score, feedback multiplier contribution)
-- Compound success metric: binary hit = played + saved/liked
-- Per-recommendation outcome logging (was it played? saved? skipped?)
-- Explanation text tied to actual score components, not canned copy
+- Full-cascade feedback filtering: AI classifies track traits from text feedback → exclude track / album / artist / genre-mood tag by confidence
+- Like/dislike ↔ text feedback sync: sentiment from text auto-sets thumbs toggle (research to validate exact UX)
+- Taste evolution live update: "when I started vs now" recalculates after every recommendation generation and on session end (currently always zero)
+- Auto-load stats on page load; remove manual "Refresh Stats" button
+- Top artists cards: fix black text readability, clarify or remove yellow/red labels, fix dark color washout — research decides optimal data to surface
+- Taste profile metrics: clearer labels and copy so users understand what each metric means
 
 ---
 
@@ -81,12 +83,14 @@ Recommend one song per day that the user genuinely discovers — not a song they
 - ✓ Score breakdown UI displayed in frontend ScoreBreakdown component (Phase 8)
 - ✓ CONCEPTS.md and SYSTEM_DESIGN.md updated to reflect v1.1 implementation (Phase 9)
 
-### Active (v1.1 target)
+### Active (v1.2 target)
 
-- [ ] "Why this gem" score breakdown in UI — genre match %, novelty score, feedback multiplier contribution
-- [ ] Compound success metric: binary hit = played + saved/liked
-- [ ] Per-recommendation outcome logging (was it played? saved? skipped?)
-- [ ] Explanation text tied to actual score components (not canned copy)
+- [ ] Full-cascade feedback filtering from text: AI classifies track traits → exclude track / album / artist / genre-mood tag by confidence
+- [ ] Like/dislike ↔ text feedback sync: text sentiment auto-sets thumbs toggle
+- [ ] Taste evolution "when I started vs now" live update after each recommendation generation and session end
+- [ ] Remove manual "Refresh Stats" button; stats auto-load on page load
+- [ ] Top artists cards: fix black text, clarify yellow/red labels, fix dark color washout, research-driven data display
+- [ ] Taste profile metrics: clearer labels and copy
 
 ### Active (future milestones)
 
@@ -163,4 +167,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 — Phase 9 complete; v1.1 milestone documentation synchronized*
+*Last updated: 2026-06-19 — v1.1 complete; v1.2 Feedback-Driven Recommendation Refinement started*

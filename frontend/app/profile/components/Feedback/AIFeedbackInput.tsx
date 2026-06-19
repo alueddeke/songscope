@@ -118,7 +118,7 @@ export default function AIFeedbackInput({ trackId, onFeedbackSubmitted }: AIFeed
 
   const getInterpretationSummary = (interpretation: any) => {
     const changes = [];
-    
+
     if (interpretation.tempo_preference) {
       changes.push(`Tempo: ${interpretation.tempo_preference}`);
     }
@@ -129,12 +129,20 @@ export default function AIFeedbackInput({ trackId, onFeedbackSubmitted }: AIFeed
       changes.push(`Energy: ${interpretation.energy_preference}`);
     }
     if (interpretation.specific_artists?.length) {
-      changes.push(`Artists: ${interpretation.specific_artists.join(", ")}`);
+      changes.push(`Avoid artists: ${interpretation.specific_artists.join(", ")}`);
+    } else if (interpretation.artist_preference === "avoid_artist") {
+      changes.push("Avoid current artist");
+    } else if (interpretation.artist_preference === "prefer_artist") {
+      changes.push("Prefer current artist");
     }
     if (interpretation.specific_genres?.length) {
-      changes.push(`Genres: ${interpretation.specific_genres.join(", ")}`);
+      changes.push(`Avoid genres: ${interpretation.specific_genres.join(", ")}`);
+    } else if (interpretation.genre_preference === "avoid_genre") {
+      changes.push("Avoid current genre");
+    } else if (interpretation.genre_preference === "prefer_genre") {
+      changes.push("Prefer current genre");
     }
-    
+
     return changes.length > 0 ? changes.join(", ") : "No specific changes detected";
   };
 

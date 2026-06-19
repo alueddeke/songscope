@@ -37,11 +37,14 @@ export default function DailyGem() {
   const [gem, setGem] = useState<DailyGemResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showNewGemPrompt, setShowNewGemPrompt] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   const fetchGem = async (forceNew = false) => {
     try {
       setLoading(true);
       setError(null);
+      setShowNewGemPrompt(false);
       const url = forceNew ? "/api/daily-gem/?force_new=true" : "/api/daily-gem/";
       const data = await get<DailyGemResponse>(url);
       setGem(data);
@@ -180,24 +183,70 @@ export default function DailyGem() {
           </a>
         </div>
 
-        <FeedbackButtonGroup trackId={track.id} />
+        <FeedbackButtonGroup
+          trackId={track.id}
+          onDislike={() => setShowNewGemPrompt(true)}
+        />
 
         {/* Natural language feedback */}
         <div className="pt-4 border-t border-gray-800">
           <p className="text-gray-500 text-xs uppercase tracking-widest mb-3">Tell us more</p>
-          <AIFeedbackInput trackId={track.id} />
+          <AIFeedbackInput
+            trackId={track.id}
+            onFeedbackSubmitted={() => setShowFeedbackModal(true)}
+          />
         </div>
 
-        {/* Testing mode — generate a new gem without waiting until tomorrow */}
-        <div className="pt-2 border-t border-gray-800">
+        {/* Try another gem — shown after dislike or AI feedback */}
+        {showNewGemPrompt && (
+          <div className="pt-4 border-t border-gray-800 flex flex-col gap-2">
+            <p className="text-gray-400 text-sm">Not feeling this one?</p>
+            <button
+              onClick={() => fetchGem(true)}
+              className="bg-green text-black font-semibold rounded-full px-5 py-2 hover:scale-105 transition-transform text-sm w-fit"
+            >
+              Find me another song
+            </button>
+          </div>
+        )}
+
+        {/* Dev shortcut — always visible, low-key */}
+        <div className="pt-2">
           <button
             onClick={() => fetchGem(true)}
-            className="text-gray-500 text-xs hover:text-gray-300 transition-colors"
+            className="text-gray-600 text-xs hover:text-gray-400 transition-colors"
           >
             Generate new gem
           </button>
         </div>
       </div>
+
+      {/* Modal: prompt after AI feedback submitted */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-[90vw] max-w-sm shadow-2xl flex flex-col gap-4">
+            <p className="text-white font-semibold text-base">Find a new song based on your feedback?</p>
+            <p className="text-gray-400 text-sm">Your preferences have been saved. Generate a new gem now or keep listening.</p>
+            <div className="flex gap-3 mt-1">
+              <button
+                onClick={() => {
+                  setShowFeedbackModal(false);
+                  fetchGem(true);
+                }}
+                className="flex-1 bg-green text-black font-semibold rounded-full py-2 text-sm hover:scale-105 transition-transform"
+              >
+                Yes, find me one
+              </button>
+              <button
+                onClick={() => setShowFeedbackModal(false)}
+                className="flex-1 bg-gray-800 text-gray-300 font-semibold rounded-full py-2 text-sm hover:bg-gray-700 transition-colors"
+              >
+                Not yet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

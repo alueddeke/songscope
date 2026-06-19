@@ -21,10 +21,11 @@ interface FeedbackStatus {
 
 interface FeedbackButtonGroupProps {
   trackId: string;
-  onTrackRemoved?: () => void; // Callback when track is removed (for thumbs down)
+  onTrackRemoved?: () => void;
+  onDislike?: () => void;
 }
 
-export default function FeedbackButtonGroup({ trackId, onTrackRemoved }: FeedbackButtonGroupProps) {
+export default function FeedbackButtonGroup({ trackId, onTrackRemoved, onDislike }: FeedbackButtonGroupProps) {
   const [selectedFeedback, setSelectedFeedback] =
     useState<SelectableFeedbackType | null>(null);
 
@@ -62,11 +63,11 @@ export default function FeedbackButtonGroup({ trackId, onTrackRemoved }: Feedbac
       });
 
       if (feedbackType === "DISLIKE") {
-        // Remove track from UI and show notification
         setNotification("Song removed");
+        onDislike?.();
         setTimeout(() => {
           setNotification(null);
-          onTrackRemoved?.(); // Callback to remove track from parent component
+          onTrackRemoved?.();
         }, 1500);
       } else if (feedbackType === "LIKE") {
         // Handle like/unlike based on backend response

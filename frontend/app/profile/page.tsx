@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import Image from 'next/image'
 import { redirect } from 'next/navigation'
-import Recommendation from './components/Recommendation/Recommendation'
+import DailyGem from './components/DailyGem/DailyGem'
 import TopArtists from './components/TopArtists/TopArtists'
 import MetricsStrip from './components/MetricsStrip/MetricsStrip'
 import LikeTrendChart from './components/LikeTrendChart/LikeTrendChart'
@@ -62,8 +62,8 @@ const UserProfile = async () => {
         />
       </section>
 
-      <section className="min-h-[100vh] flex justify-center items-center">
-        <Recommendation />
+      <section className="min-h-[100vh] flex justify-center items-center p-2 md:p-8 lg:p-16">
+        <DailyGem />
       </section>
 
       <section className="py-64">

@@ -139,14 +139,15 @@ class HybridRecommendationEngine:
         result['bandit_active'] = True
         return result
 
-    def get_recommendations(self, limit=20, force_fresh=False) -> List[Dict]:
+    def get_recommendations(self, limit=20, force_fresh=False, exclude_ids: set = None) -> List[Dict]:
         """
         Get personalized recommendations using hybrid approach.
         Combines multiple strategies based on user profile.
-        
+
         Args:
             limit: Number of recommendations to return
             force_fresh: If True, force fresh data update regardless of timing
+            exclude_ids: Optional set of Spotify track IDs to hard-exclude from results
         """
         try:
             logger.info(f"Getting dynamic recommendations for user {self.user.id} (force_fresh: {force_fresh})")
@@ -210,8 +211,10 @@ class HybridRecommendationEngine:
                 logger.info("No hybrid recommendations found, using fallback...")
                 return self._get_fallback_recommendations(limit)
             
-            # Remove duplicates and score
+            # Remove duplicates and apply caller-supplied exclusions (e.g. the previous gem)
             unique_recommendations = self._remove_duplicates(all_recommendations)
+            if exclude_ids:
+                unique_recommendations = [r for r in unique_recommendations if r.get('id') not in exclude_ids]
             scored_recommendations = self._score_recommendations(unique_recommendations)
             
             # Filter out liked songs and recently played
@@ -850,6 +853,23 @@ class HybridRecommendationEngine:
         midpoint = pop_range.get('midpoint', 30)
         width = pop_range.get('width', 20) or 20  # guard against width=0 → ZeroDivisionError
 
+        # AI avoidances from natural-language feedback — computed once before loop
+        avoided_genres, avoided_artists = self._get_recent_ai_avoidances()
+
+        # DB genre fallback for tracks whose artist isn't in top_artists.
+        # Batch-fetched once — O(1) lookup inside loop.
+        if avoided_genres:
+            from apps.core.models import Track as TrackModel
+            candidate_ids = [r.get('id') for r in recommendations if r.get('id')]
+            db_genre_map = {
+                t['spotify_id']: t['genres']
+                for t in TrackModel.objects.filter(
+                    spotify_id__in=candidate_ids
+                ).values('spotify_id', 'genres')
+            }
+        else:
+            db_genre_map = {}
+
         for rec in recommendations:
             artist_name = rec.get('artist', '')
 
@@ -886,9 +906,43 @@ class HybridRecommendationEngine:
             # Unknown source (no key) gets 1.0 — neutral, no boost or penalty.
             rec['score'] *= source_weights.get(rec.get('source', ''), 1.0)
 
+            # AI avoidance penalty: push avoided genres/artists to near-zero score.
+            # Substring match handles compound Spotify genre names (e.g. "dark ambient").
+            # Falls back to DB Track.genres when artist isn't in top-artists lookup.
+            if avoided_genres or avoided_artists:
+                top_artist_genres = artist_genre_lookup.get(artist_name, [])
+                fallback_genres = db_genre_map.get(rec.get('id'), []) if not top_artist_genres else []
+                candidate_genre_strs = [g.lower() for g in (top_artist_genres or fallback_genres)]
+                genre_avoided = avoided_genres and any(
+                    ag in cg for ag in avoided_genres for cg in candidate_genre_strs
+                )
+                artist_avoided = avoided_artists and artist_name.lower() in avoided_artists
+                if genre_avoided or artist_avoided:
+                    rec['score'] *= 0.05
+                    logger.debug(
+                        f"AI avoidance penalty applied to {artist_name} "
+                        f"(genres={candidate_genre_strs}, avoided_genres={avoided_genres})"
+                    )
+
         recommendations.sort(key=lambda x: x['score'], reverse=True)
         return recommendations
     
+    def _get_recent_ai_avoidances(self) -> tuple:
+        """Extract avoided genres and artists from the last 10 AI feedback entries."""
+        ai_history = self.profile.data.get('preferences', {}).get('ai_feedback_history', [])
+        recent = ai_history[-10:]
+        avoided_genres: set = set()
+        avoided_artists: set = set()
+        for entry in recent:
+            interp = entry.get('interpretation', {})
+            if interp.get('genre_preference') == 'avoid_genre':
+                for g in (interp.get('specific_genres') or []):
+                    avoided_genres.add(g.lower())
+            if interp.get('artist_preference') == 'avoid_artist':
+                for a in (interp.get('specific_artists') or []):
+                    avoided_artists.add(a.lower())
+        return avoided_genres, avoided_artists
+
     def _get_fallback_recommendations(self, limit: int) -> List[Dict]:
         """Fallback to basic track discovery if hybrid approach fails"""
         try:
@@ -1028,7 +1082,21 @@ class HybridRecommendationEngine:
                 ai_feedback_history = ai_feedback_history[-50:]
             
             self.profile.data['preferences']['ai_feedback_history'] = ai_feedback_history
-            
+
+            # "I like it but I've heard it" → lower preferred popularity midpoint so
+            # future picks skew toward undiscovered tracks with similar genre/artist.
+            if interpretation.get('familiarity_context') == 'already_heard':
+                pop_range = self.profile.data['preferences'].get(
+                    'preferred_popularity_range', {'midpoint': 30, 'width': 20}
+                )
+                current_midpoint = pop_range.get('midpoint', 30)
+                pop_range['midpoint'] = max(5, current_midpoint - 10)
+                self.profile.data['preferences']['preferred_popularity_range'] = pop_range
+                logger.info(
+                    f"familiarity_context=already_heard: lowered popularity midpoint "
+                    f"{current_midpoint} → {pop_range['midpoint']}"
+                )
+
             self.profile.save()
             logger.info(f"Added AI feedback to profile: {interpretation}")
             

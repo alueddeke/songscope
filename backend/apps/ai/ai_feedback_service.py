@@ -108,12 +108,13 @@ class FeedbackInterpreter:
             # Build prompt with context
             prompt = self._build_prompt(user_text, track_info)
             
-            # Make OpenAI request
+            # Make OpenAI request — response_format guarantees valid JSON output
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=300,
-                temperature=0.1
+                temperature=0.1,
+                response_format={"type": "json_object"}
             )
             
             # Log cost
@@ -139,7 +140,9 @@ class FeedbackInterpreter:
         context = ""
         if track_info:
             context = f"\nCurrent track: {track_info.get('name', 'Unknown')} by {track_info.get('artist', 'Unknown')}"
-        
+            if track_info.get('genres'):
+                context += f"\nTrack genres: {', '.join(track_info['genres'][:4])}"
+
         return f"""
 Analyze this music feedback and extract structured information:
 "{user_text}"{context}
@@ -157,12 +160,16 @@ Return a JSON object with these fields (use null if not applicable):
     "instrumentalness_preference": "more_instrumental" | "less_instrumental" | null,
     "specific_artists": ["artist1", "artist2"] | null,
     "specific_genres": ["genre1", "genre2"] | null,
+    "familiarity_context": "already_heard" | "new_discovery" | null,
     "time_context": "morning" | "afternoon" | "evening" | "night" | null,
     "activity_context": "workout" | "relaxation" | "party" | "focus" | "driving" | null,
     "confidence": 0.0-1.0
 }}
 
-Only include fields that are clearly indicated in the feedback. Be conservative - if unsure, use null.
+Rules:
+- If user says "this genre" or "this type of music" and Track genres are provided, populate specific_genres from the track genres.
+- If user says they already know/have heard the track but still like it, set familiarity_context to "already_heard".
+- Only include fields clearly indicated in the feedback. Be conservative - if unsure, use null.
 """
     
     def _fallback_interpretation(self, user_text: str) -> Dict:

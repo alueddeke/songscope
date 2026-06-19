@@ -675,7 +675,21 @@ def submit_feedback(request):
                 'album': track.album
             }
             hybrid_engine.add_feedback(track.spotify_id, feedback.feedback_type, track_info)
-            
+
+            # DISLIKE → auto-add track genres to AI avoidance list so the scoring
+            # filter applies even without a natural-language text submission.
+            if feedback_type == 'DISLIKE' and track.genres:
+                dislike_interpretation = {
+                    'genre_preference': 'avoid_genre',
+                    'specific_genres': track.genres[:3],
+                    'confidence': 0.85,
+                }
+                hybrid_engine.add_ai_feedback(dislike_interpretation, {
+                    'name': track.name,
+                    'artist': track.artist,
+                    'genres': track.genres,
+                })
+
             logger.info(f"Feedback processed: {feedback.feedback_type} for track {track.name}")
 
             # Bug 3 fix (Phase 1): write RecommendationLog.liked so success metrics
@@ -720,20 +734,21 @@ def submit_ai_feedback(request):
         track_info = None
         track = None
         if track_id:
-            try:
-                track = Track.objects.get(spotify_id=track_id)
-                track_info = {
-                    'name': track.name,
-                    'artist': track.artist,
-                    'album': track.album
-                }
-            except Track.DoesNotExist:
-                logger.warning(f"Track {track_id} not found for AI feedback")
-        
+            track, _ = Track.objects.get_or_create(
+                spotify_id=track_id,
+                defaults={'name': '', 'artist': '', 'album': ''}
+            )
+            track_info = {
+                'name': track.name,
+                'artist': track.artist,
+                'album': track.album,
+                'genres': track.genres or [],
+            }
+
         # Guard: track is required (AIFeedback.track is non-nullable)
         if track is None:
             return JsonResponse(
-                {'error': 'Track not found; cannot store AI feedback without a valid track.'},
+                {'error': 'track_id is required'},
                 status=400
             )
 
@@ -743,6 +758,16 @@ def submit_ai_feedback(request):
         try:
             # Interpret the feedback
             interpretation = interpreter.interpret_feedback(feedback_text, track_info)
+
+            # If user said "this genre" but AI didn't name specific genres, inject the
+            # current track's genres so the avoidance filter has something to match on.
+            if (
+                interpretation.get('genre_preference') == 'avoid_genre'
+                and not interpretation.get('specific_genres')
+                and track_info
+                and track_info.get('genres')
+            ):
+                interpretation['specific_genres'] = track_info['genres'][:3]
 
             # Store the AI feedback
             ai_feedback = AIFeedback.objects.create(
@@ -803,8 +828,9 @@ def check_track_feedback(request, track_id):
         logger.error(f"Error checking track feedback: {str(e)}")
         return JsonResponse({'error': 'Failed to check feedback'}, status=500)
 
-@login_required
 def get_user_name(request):
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
     """Get user's name using Spotipy"""
     try:
         spotify_token = SpotifyToken.objects.get(user=request.user)
@@ -1110,28 +1136,39 @@ def get_daily_gem(request):
     """
     try:
         today = timezone.localdate()
+        force_new = request.GET.get('force_new', 'false').lower() == 'true'
+
+        # Capture the previous gem's track ID before deletion so we can hard-exclude
+        # it from the new candidate pool — prevents the same song being returned twice.
+        previous_gem_track_id = None
+        if force_new:
+            prev_gem = DailyGem.objects.filter(user=request.user, date=today).select_related('track').first()
+            if prev_gem:
+                previous_gem_track_id = prev_gem.track.spotify_id
+            DailyGem.objects.filter(user=request.user, date=today).delete()
 
         # --- Cached branch ---------------------------------------------------
-        try:
-            gem = DailyGem.objects.get(user=request.user, date=today)
-            track = gem.track
-            return JsonResponse({
-                'track': {
-                    'id': track.spotify_id,
-                    'name': track.name,
-                    'artist': track.artist,
-                    'album': track.album,
-                    'popularity': track.popularity if hasattr(track, 'popularity') else 0,
-                    'image_url': gem.image_url or None,
-                    'preview_url': gem.preview_url or None,
-                },
-                'explanation': gem.explanation,
-                'date': str(gem.date),
-                'cached': True,
-                'score_breakdown': gem.score_breakdown,
-            })
-        except DailyGem.DoesNotExist:
-            pass  # Fall through to fresh branch
+        if not force_new:
+            try:
+                gem = DailyGem.objects.get(user=request.user, date=today)
+                track = gem.track
+                return JsonResponse({
+                    'track': {
+                        'id': track.spotify_id,
+                        'name': track.name,
+                        'artist': track.artist,
+                        'album': track.album,
+                        'popularity': track.popularity if hasattr(track, 'popularity') else 0,
+                        'image_url': gem.image_url or None,
+                        'preview_url': gem.preview_url or None,
+                    },
+                    'explanation': gem.explanation,
+                    'date': str(gem.date),
+                    'cached': True,
+                    'score_breakdown': gem.score_breakdown,
+                })
+            except DailyGem.DoesNotExist:
+                pass  # Fall through to fresh branch
 
         # --- Fresh branch ----------------------------------------------------
         try:
@@ -1141,10 +1178,9 @@ def get_daily_gem(request):
         except SpotifyToken.DoesNotExist:
             return JsonResponse({'error': 'Spotify token not found'}, status=404)
 
-        force_new = request.GET.get('force_new', 'false').lower() == 'true'
-
         engine = HybridRecommendationEngine(request.user)
-        candidates = engine.get_recommendations(limit=10, force_fresh=force_new)
+        exclude = {previous_gem_track_id} if previous_gem_track_id else None
+        candidates = engine.get_recommendations(limit=10, force_fresh=force_new, exclude_ids=exclude)
 
         if not candidates:
             return JsonResponse({'error': 'No recommendations available'}, status=503)
@@ -1187,6 +1223,16 @@ def get_daily_gem(request):
                 'track_popularity': gem_data.get('popularity', 0),
             },
         )
+        # Log to RecommendationLog so this track stays in _get_persistent_exclusion_set()
+        # even after the DailyGem row is deleted by a subsequent force_new request.
+        if created:
+            try:
+                RecommendationLog.log_recommendation(
+                    request.user, track_obj, source=gem_data.get('source', 'daily_gem')
+                )
+            except Exception as log_err:
+                logger.error(f"Error logging daily gem to RecommendationLog: {log_err}")
+
         if not created:
             # Race condition: another request created the gem between our DoesNotExist
             # and get_or_create — return the cached one.
