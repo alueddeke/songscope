@@ -17,7 +17,9 @@ export default function ScoreBreakdown({ breakdown }: ScoreBreakdownProps) {
     <div className="flex flex-col gap-2">
       {SCORE_ROWS.map(({ key, label }) => {
         const raw = breakdown[key] ?? 0;
-        const pct = Math.round(raw * 100 / 5) * 5;
+        // feedback_multiplier range is [0.5, 1.5] — normalize before scaling
+        const normalized = key === "feedback_multiplier" ? (raw - 0.5) / 1.0 : raw;
+        const pct = Math.min(100, Math.max(0, Math.round(normalized * 100 / 5) * 5));
         return (
           <div key={key} className="flex items-center gap-2">
             <span className="text-sm text-gray-300 w-28 flex-shrink-0">{label}</span>

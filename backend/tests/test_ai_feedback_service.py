@@ -162,7 +162,7 @@ class TestFeedbackInterpreter(unittest.TestCase):
             interpreter = self.FeedbackInterpreter()
             msgs = interpreter._get_few_shot_messages()
             roles = [m["role"] for m in msgs]
-            self.assertEqual(roles, ["user", "assistant", "user", "assistant", "user", "assistant"])
+            self.assertEqual(roles, ["user", "assistant", "user", "assistant", "user", "assistant", "user", "assistant"])
             for m in msgs:
                 if m["role"] == "assistant":
                     parsed = _json.loads(m["content"])

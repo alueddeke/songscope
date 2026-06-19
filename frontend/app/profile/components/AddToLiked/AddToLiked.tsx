@@ -4,11 +4,12 @@ import { useState } from "react";
 
 interface AddToLikedProps {
   id: string;
+  initialLiked?: boolean;
 }
 
-export function AddToLiked(props: AddToLikedProps) {
-  const track_id = props.id;
-  const [liked, setLiked] = useState<boolean>(false);
+export function AddToLiked({ id, initialLiked = false }: AddToLikedProps) {
+  const track_id = id;
+  const [liked, setLiked] = useState<boolean>(initialLiked);
   const [loading, setLoading] = useState<boolean>(false);
 
   async function addToSpotify() {

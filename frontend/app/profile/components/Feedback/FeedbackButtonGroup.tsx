@@ -71,6 +71,7 @@ export default function FeedbackButtonGroup({ trackId, onTrackRemoved, onDislike
       });
 
       if (feedbackType === "DISLIKE") {
+        setSelectedFeedback("DISLIKE");
         setNotification("Song removed");
         onDislike?.();
         setTimeout(() => {

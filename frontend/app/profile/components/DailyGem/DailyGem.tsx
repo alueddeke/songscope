@@ -25,6 +25,7 @@ interface DailyGemResponse {
   score_breakdown: Record<string, number>;
   date: string;
   cached: boolean;
+  was_saved?: boolean;
 }
 
 function popularityLabel(score: number): { label: string; color: string } {
@@ -98,7 +99,7 @@ export default function DailyGem() {
     );
   }
 
-  const { track, explanation, date, score_breakdown } = gem;
+  const { track, explanation, date, score_breakdown, was_saved } = gem;
   const pop = popularityLabel(track.popularity);
   const formattedDate = new Date(date + "T00:00:00").toLocaleDateString("en-US", {
     weekday: "long",
@@ -176,7 +177,7 @@ export default function DailyGem() {
 
         {/* Actions */}
         <div className="flex flex-wrap gap-4 items-center">
-          <AddToLiked id={track.id} />
+          <AddToLiked id={track.id} initialLiked={was_saved ?? false} />
           <a
             href={`https://open.spotify.com/track/${track.id}`}
             target="_blank"

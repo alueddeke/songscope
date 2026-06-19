@@ -659,15 +659,10 @@ def submit_feedback(request):
             )
 
             from apps.recommendations.personalization_engine import PersonalizationEngine
-            personalization_engine = PersonalizationEngine(request.user)
 
-            if prior_like and feedback_type != 'LIKE':
-                personalization_engine.remove_feedback_learning(track.spotify_id)
-
-            # Update recommendations using the enhanced personalization engine
-            personalization_engine.apply_feedback_learning(feedback)
-            
-            # Also update hybrid profile
+            # Hybrid engine first (writes liked_artists/source_stats to DB).
+            # Personalization engine does a fresh DB load in apply_feedback_learning,
+            # so it runs second to avoid overwriting the hybrid engine's changes.
             hybrid_engine = HybridRecommendationEngine(request.user)
             track_info = {
                 'artist': track.artist,
@@ -675,6 +670,14 @@ def submit_feedback(request):
                 'album': track.album
             }
             hybrid_engine.add_feedback(track.spotify_id, feedback.feedback_type, track_info)
+
+            personalization_engine = PersonalizationEngine(request.user)
+
+            if prior_like and feedback_type != 'LIKE':
+                personalization_engine.remove_feedback_learning(track.spotify_id)
+
+            # Fresh DB load inside apply_feedback_learning picks up hybrid engine's writes.
+            personalization_engine.apply_feedback_learning(feedback)
 
             # DISLIKE → auto-add track genres to AI avoidance list so the scoring
             # filter applies even without a natural-language text submission.
@@ -880,6 +883,17 @@ def add_track_to_liked(request):
             ).update(was_saved=True)
         except Exception:
             pass
+
+        # Trigger taste_vector + feedback_multiplier update on save (same signal as LIKE).
+        try:
+            from apps.recommendations.personalization_engine import PersonalizationEngine
+            track_obj = Track.objects.get(spotify_id=track_id)
+            save_feedback = UserFeedback(user=request.user, track=track_obj, feedback_type='SAVE')
+            PersonalizationEngine(request.user).apply_feedback_learning(save_feedback)
+        except Track.DoesNotExist:
+            pass
+        except Exception as e:
+            logger.warning(f"add_track_to_liked: taste_vector update failed: {e}")
 
         return JsonResponse({'message': "all good"})
 
@@ -1166,6 +1180,7 @@ def get_daily_gem(request):
                     'date': str(gem.date),
                     'cached': True,
                     'score_breakdown': gem.score_breakdown,
+                    'was_saved': gem.was_saved or False,
                 })
             except DailyGem.DoesNotExist:
                 pass  # Fall through to fresh branch
@@ -1251,6 +1266,7 @@ def get_daily_gem(request):
                 'date': str(gem.date),
                 'cached': True,
                 'score_breakdown': gem.score_breakdown,
+                'was_saved': gem.was_saved or False,
             })
 
         return JsonResponse({
@@ -1267,6 +1283,7 @@ def get_daily_gem(request):
             'date': str(today),
             'cached': False,
             'score_breakdown': gem_data.get('score_breakdown', {}),
+            'was_saved': False,
         })
 
     except Exception as e:

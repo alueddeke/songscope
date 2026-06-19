@@ -130,6 +130,8 @@ class FeedbackInterpreter:
             logger.info(f"AI feedback interpretation: {interpretation}")
             return interpretation
             
+        except CostLimitExceeded:
+            raise
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse OpenAI response: {str(e)}")
             return self._fallback_interpretation(user_text)
