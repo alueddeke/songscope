@@ -117,15 +117,32 @@ class TestFeedbackInterpreter(unittest.TestCase):
         """Test rate limiting functionality"""
         with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
             mock_settings.OPENAI_API_KEY = 'test-api-key'
-            
+
             interpreter = self.FeedbackInterpreter()
-            
+
             # Mock rate limiter to return False (limit exceeded)
             interpreter.rate_limiter.check_openai_limit = Mock(return_value=False)
-            
+
             # Should raise RateLimitExceeded
             with self.assertRaises(Exception):  # RateLimitExceeded
                 interpreter.interpret_feedback("test feedback")
+
+    def test_build_prompt_contains_overall_sentiment(self):
+        """Test that _build_prompt schema includes overall_sentiment field"""
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
+            mock_settings.OPENAI_API_KEY = None
+            interpreter = self.FeedbackInterpreter()
+            prompt = interpreter._build_prompt("test feedback")
+            self.assertIn("overall_sentiment", prompt)
+
+    def test_fallback_interpretation_contains_overall_sentiment_key(self):
+        """Test that fallback interpretation always includes overall_sentiment key"""
+        self.mock_openai.side_effect = Exception("API Error")
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
+            mock_settings.OPENAI_API_KEY = 'test-api-key'
+            interpreter = self.FeedbackInterpreter()
+            result = interpreter.interpret_feedback("I love fast music!")
+            self.assertIn("overall_sentiment", result)
 
 class TestRateLimitMonitor(unittest.TestCase):
     """Test cases for RateLimitMonitor class"""
