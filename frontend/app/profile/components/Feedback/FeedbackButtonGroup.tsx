@@ -23,9 +23,10 @@ interface FeedbackButtonGroupProps {
   trackId: string;
   onTrackRemoved?: () => void;
   onDislike?: () => void;
+  syncedFeedback?: 'LIKE' | 'DISLIKE' | null;
 }
 
-export default function FeedbackButtonGroup({ trackId, onTrackRemoved, onDislike }: FeedbackButtonGroupProps) {
+export default function FeedbackButtonGroup({ trackId, onTrackRemoved, onDislike, syncedFeedback }: FeedbackButtonGroupProps) {
   const [selectedFeedback, setSelectedFeedback] =
     useState<SelectableFeedbackType | null>(null);
 
@@ -52,6 +53,12 @@ export default function FeedbackButtonGroup({ trackId, onTrackRemoved, onDislike
     setSelectedFeedback(null);
     checkInitialLikeState();
   }, [trackId, checkInitialLikeState]);
+
+  useEffect(() => {
+    if (syncedFeedback != null) {
+      setSelectedFeedback(syncedFeedback);
+    }
+  }, [syncedFeedback]);
 
   const handleSubmit = async (feedbackType: FeedbackType) => {
     setStatus({ loading: true, error: null, success: false });
