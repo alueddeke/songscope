@@ -27,11 +27,21 @@ export default function ImprovementStory() {
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchMetrics = () => {
     get<MetricsResponse>("/api/recommendation-metrics/")
       .then((r) => setStory(r.improvement_story ?? null))
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchMetrics();
+  }, []);
+
+  useEffect(() => {
+    const handler = () => fetchMetrics();
+    window.addEventListener('songscope:new-gem', handler);
+    return () => window.removeEventListener('songscope:new-gem', handler);
   }, []);
 
   if (loading || !story || story.first_7_rate === null || story.last_7_rate === null) {
