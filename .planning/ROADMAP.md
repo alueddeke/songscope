@@ -258,3 +258,25 @@ Phase 9 can begin after Phase 7 completes; it does not block Phase 8.
 ---
 
 _Last updated: 2026-05-14_
+
+---
+
+## Milestone: v1.2 — Feedback-Driven Recommendation Refinement
+
+**Goal:** Every piece of user feedback visibly improves future recommendations, the UI communicates results clearly, and profile stats update live so users see the loop close in real time.
+
+**Success state:** AI text feedback auto-syncs the like/dislike toggle; taste evolution stats refresh after each new gem; manual "Refresh stats" button removed; top artists popularity indicators are semantically correct for a hidden-gem app; profile section labels are clear.
+
+---
+
+## Phase 10: v1.2 UX & Feedback Refinement
+**Goal**: Close the visible feedback loop — AI text feedback syncs the thumbs toggle, taste evolution stats live-refresh after new gems, and the profile page UI communicates what it shows without ambiguity.
+**Depends on**: Phase 9
+**Requirements**: SYNC-01, SYNC-02, SYNC-03, EVOLVE-01, EVOLVE-02, UI-01, UI-02, UI-03, UI-04
+**Success Criteria** (what must be TRUE):
+  1. Submitting AI text feedback with positive/negative sentiment automatically updates the like/dislike toggle visual state in FeedbackButtonGroup — no double API call
+  2. Generating a new gem (force_new=true) triggers ImprovementStory to refetch — delta updates without page reload
+  3. MetricsStrip has no "Refresh stats" button; all stats load automatically on mount
+  4. TopArtists cards show "Hidden Gem" (green) for popularity < 40, "Rising" (yellow) for 40–69, "Mainstream" (gray) for ≥70 — not the inverse color scheme
+  5. TopArtists expanded section has visible background (bg-gray-800 not bg-gray-850)
+**Plans**: TBD

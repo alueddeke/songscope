@@ -31,12 +31,36 @@ _Created: 2026-05-13_
 
 ---
 
+## v1.2 Requirements — Feedback-Driven Recommendation Refinement
+
+_Phase 10_
+
+### AI Feedback ↔ Thumbs Sync
+
+- [ ] **SYNC-01**: `ai_feedback_service.py` `_build_prompt` returns `overall_sentiment: "positive" | "negative" | "neutral" | null` as part of the structured JSON schema — one new field, all existing fields unchanged
+- [ ] **SYNC-02**: `FeedbackButtonGroup.tsx` accepts a `syncedFeedback?: 'LIKE' | 'DISLIKE' | null` prop; when prop changes to a non-null value, `setSelectedFeedback` mirrors it (visual toggle only — no second API call to `/api/submit-feedback/`)
+- [ ] **SYNC-03**: `DailyGem.tsx` tracks `aiSyncedFeedback` state; `onFeedbackSubmitted` callback maps `overall_sentiment === 'positive'` → `'LIKE'`, `overall_sentiment === 'negative'` → `'DISLIKE'`, else `null`; passes as `syncedFeedback` prop to `FeedbackButtonGroup`
+
+### Taste Evolution Live Refresh
+
+- [ ] **EVOLVE-01**: `DailyGem.tsx` dispatches `window.dispatchEvent(new CustomEvent('songscope:new-gem'))` after `setGem(data)` in `fetchGem` — fires on both initial load and `force_new` regeneration
+- [ ] **EVOLVE-02**: `ImprovementStory.tsx` adds a `useEffect` listener for `'songscope:new-gem'` that calls `fetchMetrics()` — cleans up listener on unmount; existing initial-load `useEffect` unchanged
+
+### Profile UI Quality
+
+- [ ] **UI-01**: `MetricsStrip.tsx` — remove the manual "Refresh stats" button (lines ~89-95) and its `refreshing` / `setRefreshing` state; `fetchMetrics` signature simplified to `async () => void`; auto-load on mount unchanged
+- [ ] **UI-02**: `TopArtists.tsx` — replace `getPopularityColor` (green=high pop, red=low pop — semantically backwards for a hidden-gem app) with `getPopularityLabel` returning `{ label: 'Hidden Gem' | 'Rising' | 'Mainstream', color: 'text-green' | 'text-yellow-400' | 'text-gray-400' }` where Hidden Gem = popularity < 40 (green), Rising = 40–69 (yellow), Mainstream ≥ 70 (gray); replace `${artist.popularity}% popular` text with the label string
+- [ ] **UI-03**: `TopArtists.tsx` — replace `bg-gray-850` (non-existent Tailwind class → transparent background) with `bg-gray-800` in the expanded artist row container
+- [ ] **UI-04**: `profile/page.tsx` — refine section subtitle copy: "How your taste is evolving" section labels updated to "Like-rate trend (7-day rolling)" and "Your genre taste profile" for clarity
+
+---
+
 ## Future Requirements (deferred)
 
 - Preview-play proxy — unreliable; Spotify returning `null` `preview_url` on many tracks as of late 2024
-- Evaluation dashboard — learning curve, per-source win rates, A/B framework (v1.2)
-- Audio feature proxy via AcousticBrainz/Last.fm (v1.3)
-- Collaborative filtering + Postgres migration (v1.4)
+- Evaluation dashboard — learning curve, per-source win rates, A/B framework (v1.3)
+- Audio feature proxy via AcousticBrainz/Last.fm (v1.4)
+- Collaborative filtering + Postgres migration (v1.5)
 - Production deployment (vDeploy)
 
 ---
@@ -65,3 +89,12 @@ _Created: 2026-05-13_
 | METRIC-03 | Phase 8 |
 | DOCS-01 | Phase 9 |
 | DOCS-02 | Phase 9 |
+| SYNC-01 | Phase 10 |
+| SYNC-02 | Phase 10 |
+| SYNC-03 | Phase 10 |
+| EVOLVE-01 | Phase 10 |
+| EVOLVE-02 | Phase 10 |
+| UI-01 | Phase 10 |
+| UI-02 | Phase 10 |
+| UI-03 | Phase 10 |
+| UI-04 | Phase 10 |
