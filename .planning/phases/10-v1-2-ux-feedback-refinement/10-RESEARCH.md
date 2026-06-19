@@ -325,17 +325,19 @@ No library upgrades or paradigm shifts apply to this phase. All patterns are sta
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `aiSyncedFeedback` reset to `null` when a new gem loads?**
    - What we know: `DailyGem.tsx` calls `fetchGem(true)` which replaces `gem` state. `FeedbackButtonGroup` resets `selectedFeedback` to `null` in its own `useEffect` when `trackId` changes (line 52).
    - What's unclear: If `aiSyncedFeedback` holds a stale `'LIKE'` from the previous gem, the `syncedFeedback` prop will re-sync the new gem's toggle immediately.
    - Recommendation: Reset `aiSyncedFeedback` to `null` inside `fetchGem` before the `get()` call (or alongside `setGem(data)`). This mirrors how `selectedFeedback` in `FeedbackButtonGroup` resets on trackId change. Not a blocker but should be explicit in the plan.
+   - **RESOLVED: D-01 — reset aiSyncedFeedback to null before fetchGem get() call.**
 
 2. **Should EVOLVE-01 dispatch also fire on the initial mount load?**
    - What we know: EVOLVE-01 says "fires on both initial load and force_new regeneration." `ImprovementStory` already fetches on mount independently. If the initial `fetchGem()` also dispatches, `ImprovementStory` will double-fetch on page load.
    - What's unclear: Whether the double-fetch is acceptable (both calls are cheap, idempotent GET requests) or whether the event should only fire on `force_new = true`.
    - Recommendation: Fire on both as specified by EVOLVE-01. The double-fetch on initial load is harmless (the second fetch just overwrites with identical data). Simplicity > optimization here.
+   - **RESOLVED: D-02 — dispatch fires on every fetchGem call, not on mount.**
 
 ---
 
