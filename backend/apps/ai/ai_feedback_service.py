@@ -105,14 +105,16 @@ class FeedbackInterpreter:
             raise RateLimitExceeded("OpenAI rate limit exceeded")
         
         try:
-            # Build prompt with context
-            prompt = self._build_prompt(user_text, track_info)
-            
-            # Make OpenAI request — response_format guarantees valid JSON output
+            messages = [
+                {"role": "system", "content": self._build_system_prompt()},
+                *self._get_few_shot_messages(),
+                {"role": "user", "content": self._build_prompt(user_text, track_info)},
+            ]
+
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=300,
+                messages=messages,
+                max_tokens=400,
                 temperature=0.1,
                 response_format={"type": "json_object"}
             )
@@ -135,49 +137,141 @@ class FeedbackInterpreter:
             logger.error(f"OpenAI request failed: {str(e)}")
             return self._fallback_interpretation(user_text)
     
+    def _build_system_prompt(self) -> str:
+        """System message: schema, vocabulary mapping, and rules for preference extraction."""
+        empty_json = json.dumps({
+            "tempo_preference": None, "mood_preference": None, "artist_preference": None,
+            "genre_preference": None, "energy_preference": None, "valence_preference": None,
+            "danceability_preference": None, "acousticness_preference": None,
+            "instrumentalness_preference": None, "specific_artists": None,
+            "specific_genres": None, "familiarity_context": None, "time_context": None,
+            "activity_context": None, "overall_sentiment": None, "confidence": 0.5,
+        })
+        return f"""You are a music preference extractor. Given a user's natural-language feedback about a song recommendation, return a single JSON object with the fields below. Use null for fields not mentioned or not clearly implied.
+
+OUTPUT SCHEMA — return all 16 fields every time:
+{{
+  "tempo_preference": "slower" | "faster" | null,
+  "mood_preference": "happier" | "sadder" | "calmer" | "more energetic" | "less energetic" | null,
+  "artist_preference": "avoid_artist" | "prefer_artist" | null,
+  "genre_preference": "avoid_genre" | "prefer_genre" | null,
+  "energy_preference": "lower" | "higher" | null,
+  "valence_preference": "happier" | "sadder" | null,
+  "danceability_preference": "more_danceable" | "less_danceable" | null,
+  "acousticness_preference": "more_acoustic" | "less_acoustic" | null,
+  "instrumentalness_preference": "more_instrumental" | "less_instrumental" | null,
+  "specific_artists": ["name"] | null,
+  "specific_genres": ["genre"] | null,
+  "familiarity_context": "already_heard" | "new_discovery" | null,
+  "time_context": "morning" | "afternoon" | "evening" | "night" | null,
+  "activity_context": "workout" | "relaxation" | "party" | "focus" | "driving" | null,
+  "overall_sentiment": "positive" | "negative" | "neutral" | null,
+  "confidence": 0.0-1.0
+}}
+
+VOCABULARY MAPPING — use these exact mappings:
+
+Vocals / singing:
+  "vocals", "with vocals", "has singing", "someone singing", "sung", "lyrics", "singer"
+    → instrumentalness_preference: "less_instrumental"
+  "no vocals", "without vocals", "purely instrumental", "no singing", "instrumental only"
+    → instrumentalness_preference: "more_instrumental"
+
+Energy / intensity:
+  "energetic", "more energy", "high energy", "upbeat", "hype", "banger", "bangers",
+  "hard-hitting", "pump up", "intense", "powerful"
+    → energy_preference: "higher", mood_preference: "more energetic"
+  "chill", "mellow", "relaxed", "laid-back", "calm", "less intense", "soft", "gentle",
+  "wind down", "easy listening"
+    → energy_preference: "lower", mood_preference: "calmer"
+
+Tempo:
+  "faster", "quicker", "speed it up", "fast tempo"  → tempo_preference: "faster"
+  "slower", "slow it down", "slow tempo"            → tempo_preference: "slower"
+
+Mood / valence:
+  "happy", "uplifting", "feel-good", "positive vibes", "cheerful", "fun"
+    → valence_preference: "happier"
+  "sad", "melancholy", "dark", "gloomy", "depressing"
+    → valence_preference: "sadder"
+
+Genre avoidance — "no X" / "without X" / "avoid X" / "not X" for any genre name:
+  Set genre_preference: "avoid_genre" and specific_genres: [X]
+  Examples: "no ambient" → specific_genres: ["ambient"]
+            "avoid jazz"  → specific_genres: ["jazz"]
+            "not classical" → specific_genres: ["classical"]
+
+Genre preference — "more X" / "give me X" for any genre name:
+  Set genre_preference: "prefer_genre" and specific_genres: [X]
+
+RULES:
+1. NEGATION: "no X", "without X", "avoid X", "not X", "don't want X" → extract X as avoidance.
+   For a genre: genre_preference: "avoid_genre", specific_genres: [X].
+   For a feature: set the OPPOSITE direction (e.g. "no energy" → energy_preference: "lower").
+2. MULTI-SIGNAL: Extract ALL preferences mentioned. "more energetic with vocals" → set BOTH
+   energy_preference AND instrumentalness_preference.
+3. INFER: If context strongly implies a preference, extract it. "morning run" → activity_context:
+   "workout", energy_preference: "higher". Do NOT default to null when context is clear.
+4. GENRE CONTEXT: If user says "this genre" / "this type of music" and track genres are listed,
+   populate specific_genres from those genres.
+5. FAMILIARITY: "already know this", "I've heard this before" → familiarity_context: "already_heard".
+6. SENTIMENT: positive if satisfied, negative if dissatisfied, neutral if informational/mixed.
+7. CONFIDENCE: 0.8-1.0 for explicit preferences, 0.5-0.7 for inferred, 0.3-0.4 if uncertain.
+
+Empty-feedback baseline (use as template): {empty_json}"""
+
+    def _get_few_shot_messages(self) -> list:
+        """Three few-shot user/assistant pairs covering the most commonly misinterpreted patterns."""
+        ex1_out = json.dumps({
+            "tempo_preference": None, "mood_preference": None, "artist_preference": None,
+            "genre_preference": None, "energy_preference": None, "valence_preference": None,
+            "danceability_preference": None, "acousticness_preference": None,
+            "instrumentalness_preference": "more_instrumental", "specific_artists": None,
+            "specific_genres": None, "familiarity_context": None, "time_context": None,
+            "activity_context": None, "overall_sentiment": "negative", "confidence": 0.95,
+        })
+        ex2_out = json.dumps({
+            "tempo_preference": "faster", "mood_preference": "more energetic",
+            "artist_preference": None, "genre_preference": None, "energy_preference": "higher",
+            "valence_preference": None, "danceability_preference": "more_danceable",
+            "acousticness_preference": None, "instrumentalness_preference": None,
+            "specific_artists": None, "specific_genres": None, "familiarity_context": None,
+            "time_context": None, "activity_context": "workout", "overall_sentiment": "neutral",
+            "confidence": 0.9,
+        })
+        ex3_out = json.dumps({
+            "tempo_preference": None, "mood_preference": "more energetic",
+            "artist_preference": None, "genre_preference": "avoid_genre",
+            "energy_preference": "higher", "valence_preference": None,
+            "danceability_preference": "more_danceable", "acousticness_preference": None,
+            "instrumentalness_preference": "less_instrumental",
+            "specific_artists": None, "specific_genres": ["ambient"],
+            "familiarity_context": None, "time_context": None, "activity_context": None,
+            "overall_sentiment": "negative", "confidence": 0.95,
+        })
+        return [
+            {"role": "user", "content": 'Feedback: "I hate hearing vocals, give me something purely instrumental"'},
+            {"role": "assistant", "content": ex1_out},
+            {"role": "user", "content": 'Feedback: "More energetic please, I\'m working out"'},
+            {"role": "assistant", "content": ex2_out},
+            {"role": "user", "content": 'Feedback: "No more ambient music, give me something with a beat and vocals"'},
+            {"role": "assistant", "content": ex3_out},
+        ]
+
     def _build_prompt(self, user_text: str, track_info: Dict = None) -> str:
-        """Build the prompt for OpenAI"""
+        """Build the user turn: feedback text + optional track context."""
         context = ""
         if track_info:
             context = f"\nCurrent track: {track_info.get('name', 'Unknown')} by {track_info.get('artist', 'Unknown')}"
             if track_info.get('genres'):
                 context += f"\nTrack genres: {', '.join(track_info['genres'][:4])}"
-
-        return f"""
-Analyze this music feedback and extract structured information:
-"{user_text}"{context}
-
-Return a JSON object with these fields (use null if not applicable):
-{{
-    "tempo_preference": "slower" | "faster" | null,
-    "mood_preference": "happier" | "sadder" | "calmer" | "more energetic" | "less energetic" | null,
-    "artist_preference": "avoid_artist" | "prefer_artist" | null,
-    "genre_preference": "avoid_genre" | "prefer_genre" | null,
-    "energy_preference": "lower" | "higher" | null,
-    "valence_preference": "happier" | "sadder" | null,
-    "danceability_preference": "more_danceable" | "less_danceable" | null,
-    "acousticness_preference": "more_acoustic" | "less_acoustic" | null,
-    "instrumentalness_preference": "more_instrumental" | "less_instrumental" | null,
-    "specific_artists": ["artist1", "artist2"] | null,
-    "specific_genres": ["genre1", "genre2"] | null,
-    "familiarity_context": "already_heard" | "new_discovery" | null,
-    "time_context": "morning" | "afternoon" | "evening" | "night" | null,
-    "activity_context": "workout" | "relaxation" | "party" | "focus" | "driving" | null,
-    "overall_sentiment": "positive" | "negative" | "neutral" | null,
-    "confidence": 0.0-1.0
-}}
-
-Rules:
-- If user says "this genre" or "this type of music" and Track genres are provided, populate specific_genres from the track genres.
-- If user says they already know/have heard the track but still like it, set familiarity_context to "already_heard".
-- Set overall_sentiment based on the general tone of the feedback: "positive" if the user is satisfied/happy, "negative" if dissatisfied, "neutral" if informational or mixed, null if unclear.
-- Only include fields clearly indicated in the feedback. Be conservative - if unsure, use null.
-"""
+        return f'Feedback: "{user_text}"{context}'
     
     def _fallback_interpretation(self, user_text: str) -> Dict:
         """Fallback interpretation when OpenAI is not available"""
+        import re
         user_text_lower = user_text.lower()
-        
+
         interpretation = {
             "tempo_preference": None,
             "mood_preference": None,
@@ -190,31 +284,76 @@ Rules:
             "instrumentalness_preference": None,
             "specific_artists": None,
             "specific_genres": None,
+            "familiarity_context": None,
             "time_context": None,
             "activity_context": None,
             "overall_sentiment": None,
-            "confidence": 0.3
+            "confidence": 0.3,
         }
-        
-        # Simple keyword matching
-        if any(word in user_text_lower for word in ["fast", "quick", "upbeat"]):
-            interpretation["tempo_preference"] = "faster"
-        elif any(word in user_text_lower for word in ["slow", "slower", "downbeat"]):
-            interpretation["tempo_preference"] = "slower"
-        
-        if any(word in user_text_lower for word in ["sad", "depressing", "melancholy"]):
-            interpretation["mood_preference"] = "sadder"
-        elif any(word in user_text_lower for word in ["happy", "upbeat", "cheerful"]):
-            interpretation["mood_preference"] = "happier"
-        
-        if any(word in user_text_lower for word in ["angry", "aggressive", "intense"]):
-            interpretation["energy_preference"] = "higher"
-        elif any(word in user_text_lower for word in ["calm", "peaceful", "gentle"]):
-            interpretation["energy_preference"] = "lower"
 
-        if any(word in user_text_lower for word in ["love", "great", "amazing", "good", "like"]):
+        # Tempo
+        if any(w in user_text_lower for w in ["fast", "quick", "faster", "speed up"]):
+            interpretation["tempo_preference"] = "faster"
+        elif any(w in user_text_lower for w in ["slow", "slower", "slow down"]):
+            interpretation["tempo_preference"] = "slower"
+
+        # Mood / valence
+        if any(w in user_text_lower for w in ["sad", "depressing", "melancholy", "gloomy", "dark"]):
+            interpretation["mood_preference"] = "sadder"
+            interpretation["valence_preference"] = "sadder"
+        elif any(w in user_text_lower for w in ["happy", "cheerful", "uplifting", "feel good", "fun"]):
+            interpretation["mood_preference"] = "happier"
+            interpretation["valence_preference"] = "happier"
+
+        # Energy — covers the "energetic/banger" pattern the AI was missing
+        if any(w in user_text_lower for w in [
+            "energetic", "more energy", "high energy", "banger", "bangers",
+            "hype", "pump up", "intense", "powerful", "angry", "aggressive",
+        ]):
+            interpretation["energy_preference"] = "higher"
+            interpretation["mood_preference"] = "more energetic"
+        elif any(w in user_text_lower for w in [
+            "calm", "chill", "mellow", "relaxed", "laid-back", "peaceful",
+            "gentle", "soft", "wind down", "easy listening",
+        ]):
+            interpretation["energy_preference"] = "lower"
+            interpretation["mood_preference"] = "calmer"
+
+        # Instrumentalness / vocals — check negations BEFORE bare keyword matches
+        if any(w in user_text_lower for w in [
+            "no vocals", "without vocals", "purely instrumental", "instrumental only",
+            "no singing",
+        ]):
+            interpretation["instrumentalness_preference"] = "more_instrumental"
+        elif any(w in user_text_lower for w in [
+            "vocal", "vocals", "singing", "sung", "lyrics", "singer", "with vocals",
+        ]):
+            interpretation["instrumentalness_preference"] = "less_instrumental"
+
+        # Genre avoidance — "no ambient", "avoid jazz", "not classical" etc.
+        _KNOWN_GENRES = {
+            "ambient", "classical", "jazz", "metal", "rock", "pop", "country",
+            "electronic", "folk", "reggae", "blues", "rap", "hip-hop", "indie",
+            "punk", "soul", "rnb", "r&b", "dance", "edm", "house", "techno",
+            "acoustic", "new age",
+        }
+        avoid_match = re.search(
+            r'\b(?:no|not|without|avoid|stop)\s+([a-z][a-z&-]*)\b',
+            user_text_lower,
+        )
+        if avoid_match:
+            candidate = avoid_match.group(1).strip()
+            if candidate in _KNOWN_GENRES:
+                interpretation["genre_preference"] = "avoid_genre"
+                interpretation["specific_genres"] = [candidate]
+
+        # Sentiment
+        if any(w in user_text_lower for w in ["love", "great", "amazing", "good", "like"]):
             interpretation["overall_sentiment"] = "positive"
-        elif any(word in user_text_lower for word in ["hate", "don't like", "awful", "bad", "dislike", "not"]):
+        elif any(w in user_text_lower for w in [
+            "hate", "don't like", "awful", "bad", "dislike", "no more",
+            "stop", "not", "terrible",
+        ]):
             interpretation["overall_sentiment"] = "negative"
 
         return interpretation

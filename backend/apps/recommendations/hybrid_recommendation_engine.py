@@ -18,6 +18,34 @@ from datetime import datetime, timedelta
 import json
 import random
 from collections import defaultdict
+
+# Genre proxy sets — used to translate audio-feature preferences into genre signals when
+# Spotify audio features API is unavailable (restricted since Nov 2024 for new apps).
+# Substring matching is intentional: "dark ambient" contains "ambient", "indie pop" contains "pop".
+_LOW_ENERGY_GENRES = frozenset({
+    "ambient", "new age", "sleep", "meditation", "classical", "acoustic",
+    "folk", "soft rock", "chillout", "lo-fi", "downtempo", "drone",
+    "slowcore", "dream pop", "bedroom pop",
+})
+_HIGH_ENERGY_GENRES = frozenset({
+    "rock", "metal", "punk", "electronic", "edm", "dance", "hip-hop",
+    "drum and bass", "hardstyle", "techno", "house", "trap", "hardcore",
+    "dubstep", "jungle", "breakbeat", "pop punk", "hip hop",
+})
+_INSTRUMENTAL_GENRES = frozenset({
+    "ambient", "classical", "instrumental", "post-rock", "new age",
+    "meditation", "drone", "soundtrack", "lo-fi", "jazz instrumental",
+})
+_VOCAL_GENRES = frozenset({
+    "pop", "r&b", "soul", "country", "indie pop", "singer-songwriter",
+    "hip-hop", "reggae", "gospel", "rnb", "hip hop",
+})
+_HIGH_VALENCE_GENRES = frozenset({
+    "pop", "dance", "disco", "funk", "reggae", "ska", "party",
+})
+_LOW_VALENCE_GENRES = frozenset({
+    "blues", "emo", "gothic", "slowcore", "dark", "sad", "melancholy",
+})
 import spotipy
 from spotipy.exceptions import SpotifyException
 from django.conf import settings
@@ -856,9 +884,11 @@ class HybridRecommendationEngine:
         # AI avoidances from natural-language feedback — computed once before loop
         avoided_genres, avoided_artists = self._get_recent_ai_avoidances()
 
-        # DB genre fallback for tracks whose artist isn't in top_artists.
-        # Batch-fetched once — O(1) lookup inside loop.
-        if avoided_genres:
+        # DB genre fallback — always built so genre_sim also benefits from it, not just
+        # avoidance. Discovery tracks whose artist isn't in top_artists get genre_sim=0
+        # without this; one batch IN-query on indexed spotify_id is cheap.
+        # Wrapped in try/except: enrichment is additive; empty dict is safe fallback.
+        try:
             from apps.core.models import Track as TrackModel
             candidate_ids = [r.get('id') for r in recommendations if r.get('id')]
             db_genre_map = {
@@ -866,15 +896,18 @@ class HybridRecommendationEngine:
                 for t in TrackModel.objects.filter(
                     spotify_id__in=candidate_ids
                 ).values('spotify_id', 'genres')
-            }
-        else:
+            } if candidate_ids else {}
+        except Exception:
             db_genre_map = {}
 
         for rec in recommendations:
             artist_name = rec.get('artist', '')
 
-            # genre_sim: cosine similarity between candidate genres and user taste vector
-            candidate_genres = {g: 1.0 for g in artist_genre_lookup.get(artist_name, [])}
+            # genre_sim: cosine similarity between candidate genres and user taste vector.
+            # Prefer top-artist genres; fall back to DB genres for discovery tracks whose
+            # artist isn't in the user's top-artists list.
+            artist_genres = artist_genre_lookup.get(artist_name) or db_genre_map.get(rec.get('id'), [])
+            candidate_genres = {g: 1.0 for g in artist_genres}
             genre_sim = self._cosine_similarity(candidate_genres, taste_vector)
 
             # novelty: Gaussian bell-curve centred at preferred popularity midpoint.
@@ -910,9 +943,8 @@ class HybridRecommendationEngine:
             # Substring match handles compound Spotify genre names (e.g. "dark ambient").
             # Falls back to DB Track.genres when artist isn't in top-artists lookup.
             if avoided_genres or avoided_artists:
-                top_artist_genres = artist_genre_lookup.get(artist_name, [])
-                fallback_genres = db_genre_map.get(rec.get('id'), []) if not top_artist_genres else []
-                candidate_genre_strs = [g.lower() for g in (top_artist_genres or fallback_genres)]
+                # artist_genres already resolved above (top-artists → DB fallback)
+                candidate_genre_strs = [g.lower() for g in artist_genres]
                 genre_avoided = avoided_genres and any(
                     ag in cg for ag in avoided_genres for cg in candidate_genre_strs
                 )
@@ -928,19 +960,55 @@ class HybridRecommendationEngine:
         return recommendations
     
     def _get_recent_ai_avoidances(self) -> tuple:
-        """Extract avoided genres and artists from the last 10 AI feedback entries."""
+        """Extract avoided genres and artists from the last 10 AI feedback entries.
+
+        Also translates audio-feature preferences (energy, instrumentalness, mood, valence)
+        into genre proxies so the existing avoidance penalty applies without requiring
+        Spotify's deprecated audio-features API.
+        """
         ai_history = self.profile.data.get('preferences', {}).get('ai_feedback_history', [])
         recent = ai_history[-10:]
         avoided_genres: set = set()
         avoided_artists: set = set()
         for entry in recent:
             interp = entry.get('interpretation', {})
+
+            # Explicit genre/artist avoidances from AI extraction
             if interp.get('genre_preference') == 'avoid_genre':
                 for g in (interp.get('specific_genres') or []):
                     avoided_genres.add(g.lower())
             if interp.get('artist_preference') == 'avoid_artist':
                 for a in (interp.get('specific_artists') or []):
                     avoided_artists.add(a.lower())
+
+            # Energy preference → genre proxy avoidance
+            energy_pref = interp.get('energy_preference')
+            if energy_pref == 'higher':
+                avoided_genres.update(_LOW_ENERGY_GENRES)
+            elif energy_pref == 'lower':
+                avoided_genres.update(_HIGH_ENERGY_GENRES)
+
+            # Instrumentalness preference → genre proxy avoidance
+            inst_pref = interp.get('instrumentalness_preference')
+            if inst_pref == 'less_instrumental':   # user wants vocals
+                avoided_genres.update(_INSTRUMENTAL_GENRES)
+            elif inst_pref == 'more_instrumental': # user wants no vocals
+                avoided_genres.update(_VOCAL_GENRES)
+
+            # Mood preference → genre proxy avoidance (overlaps with energy)
+            mood_pref = interp.get('mood_preference')
+            if mood_pref == 'more energetic':
+                avoided_genres.update(_LOW_ENERGY_GENRES)
+            elif mood_pref in ('calmer', 'less energetic'):
+                avoided_genres.update(_HIGH_ENERGY_GENRES)
+
+            # Valence preference → genre proxy avoidance
+            valence_pref = interp.get('valence_preference')
+            if valence_pref == 'happier':
+                avoided_genres.update(_LOW_VALENCE_GENRES)
+            elif valence_pref == 'sadder':
+                avoided_genres.update(_HIGH_VALENCE_GENRES)
+
         return avoided_genres, avoided_artists
 
     def _get_fallback_recommendations(self, limit: int) -> List[Dict]:

@@ -128,12 +128,79 @@ class TestFeedbackInterpreter(unittest.TestCase):
                 interpreter.interpret_feedback("test feedback")
 
     def test_build_prompt_contains_overall_sentiment(self):
-        """Test that _build_prompt schema includes overall_sentiment field"""
+        """System prompt schema includes overall_sentiment field"""
         with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
             mock_settings.OPENAI_API_KEY = None
             interpreter = self.FeedbackInterpreter()
-            prompt = interpreter._build_prompt("test feedback")
-            self.assertIn("overall_sentiment", prompt)
+            system_prompt = interpreter._build_system_prompt()
+            self.assertIn("overall_sentiment", system_prompt)
+
+    def test_system_prompt_has_vocabulary_mapping(self):
+        """System prompt vocabulary table covers vocals, energetic, genre avoidance"""
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
+            mock_settings.OPENAI_API_KEY = None
+            interpreter = self.FeedbackInterpreter()
+            sp = interpreter._build_system_prompt()
+            self.assertIn("less_instrumental", sp)
+            self.assertIn("more_instrumental", sp)
+            self.assertIn("energy_preference", sp)
+            self.assertIn("avoid_genre", sp)
+
+    def test_system_prompt_has_negation_rule(self):
+        """System prompt explicitly handles 'no X' / 'without X' negation"""
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
+            mock_settings.OPENAI_API_KEY = None
+            interpreter = self.FeedbackInterpreter()
+            sp = interpreter._build_system_prompt()
+            self.assertIn("NEGATION", sp)
+
+    def test_few_shot_messages_structure(self):
+        """Few-shot messages are valid user/assistant pairs with JSON assistant turns"""
+        import json as _json
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
+            mock_settings.OPENAI_API_KEY = None
+            interpreter = self.FeedbackInterpreter()
+            msgs = interpreter._get_few_shot_messages()
+            roles = [m["role"] for m in msgs]
+            self.assertEqual(roles, ["user", "assistant", "user", "assistant", "user", "assistant"])
+            for m in msgs:
+                if m["role"] == "assistant":
+                    parsed = _json.loads(m["content"])
+                    self.assertIn("instrumentalness_preference", parsed)
+                    self.assertIn("overall_sentiment", parsed)
+
+    def test_fallback_interprets_vocals(self):
+        """Fallback correctly maps 'with vocals' to less_instrumental"""
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
+            mock_settings.OPENAI_API_KEY = None
+            interpreter = self.FeedbackInterpreter()
+            result = interpreter._fallback_interpretation("something with vocals please")
+            self.assertEqual(result["instrumentalness_preference"], "less_instrumental")
+
+    def test_fallback_interprets_no_vocals(self):
+        """Fallback correctly maps 'no vocals' to more_instrumental"""
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
+            mock_settings.OPENAI_API_KEY = None
+            interpreter = self.FeedbackInterpreter()
+            result = interpreter._fallback_interpretation("no vocals, purely instrumental")
+            self.assertEqual(result["instrumentalness_preference"], "more_instrumental")
+
+    def test_fallback_interprets_energetic(self):
+        """Fallback correctly maps 'more energetic' to energy_preference higher"""
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
+            mock_settings.OPENAI_API_KEY = None
+            interpreter = self.FeedbackInterpreter()
+            result = interpreter._fallback_interpretation("something more energetic please")
+            self.assertEqual(result["energy_preference"], "higher")
+
+    def test_fallback_interprets_genre_avoidance(self):
+        """Fallback extracts 'no ambient' as genre avoidance"""
+        with patch('apps.ai.ai_feedback_service.settings') as mock_settings:
+            mock_settings.OPENAI_API_KEY = None
+            interpreter = self.FeedbackInterpreter()
+            result = interpreter._fallback_interpretation("no ambient music please")
+            self.assertEqual(result["genre_preference"], "avoid_genre")
+            self.assertIn("ambient", result["specific_genres"])
 
     def test_fallback_interpretation_contains_overall_sentiment_key(self):
         """Test that fallback interpretation always includes overall_sentiment key"""

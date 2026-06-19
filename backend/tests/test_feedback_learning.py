@@ -648,5 +648,85 @@ class TestBellCurveNovelty(unittest.TestCase):
         )
 
 
+class TestAIGenreProxyAvoidances(unittest.TestCase):
+    """_get_recent_ai_avoidances translates audio-feature prefs into genre proxies."""
+
+    def _make_engine(self, ai_feedback_history):
+        from apps.recommendations.hybrid_recommendation_engine import HybridRecommendationEngine
+        engine = HybridRecommendationEngine.__new__(HybridRecommendationEngine)
+        engine.user = Mock(id=1)
+        engine.profile = Mock()
+        engine.profile.data = {
+            "preferences": {"ai_feedback_history": ai_feedback_history},
+        }
+        return engine
+
+    def test_energy_higher_avoids_low_energy_genres(self):
+        engine = self._make_engine([
+            {"interpretation": {"energy_preference": "higher"}, "confidence": 0.9}
+        ])
+        avoided, _ = engine._get_recent_ai_avoidances()
+        self.assertIn("ambient", avoided)
+        self.assertIn("new age", avoided)
+
+    def test_energy_lower_avoids_high_energy_genres(self):
+        engine = self._make_engine([
+            {"interpretation": {"energy_preference": "lower"}, "confidence": 0.9}
+        ])
+        avoided, _ = engine._get_recent_ai_avoidances()
+        self.assertIn("rock", avoided)
+        self.assertIn("edm", avoided)
+
+    def test_less_instrumental_avoids_instrumental_genres(self):
+        """User wants vocals → instrumental genres penalised."""
+        engine = self._make_engine([
+            {"interpretation": {"instrumentalness_preference": "less_instrumental"}, "confidence": 0.9}
+        ])
+        avoided, _ = engine._get_recent_ai_avoidances()
+        self.assertIn("ambient", avoided)
+        self.assertIn("classical", avoided)
+
+    def test_more_instrumental_avoids_vocal_genres(self):
+        """User wants no vocals → vocal-centric genres penalised."""
+        engine = self._make_engine([
+            {"interpretation": {"instrumentalness_preference": "more_instrumental"}, "confidence": 0.9}
+        ])
+        avoided, _ = engine._get_recent_ai_avoidances()
+        self.assertIn("pop", avoided)
+        self.assertIn("soul", avoided)
+
+    def test_mood_more_energetic_avoids_low_energy_genres(self):
+        engine = self._make_engine([
+            {"interpretation": {"mood_preference": "more energetic"}, "confidence": 0.9}
+        ])
+        avoided, _ = engine._get_recent_ai_avoidances()
+        self.assertIn("ambient", avoided)
+
+    def test_valence_happier_avoids_dark_genres(self):
+        engine = self._make_engine([
+            {"interpretation": {"valence_preference": "happier"}, "confidence": 0.9}
+        ])
+        avoided, _ = engine._get_recent_ai_avoidances()
+        self.assertIn("blues", avoided)
+
+    def test_explicit_genre_avoidance_still_works(self):
+        engine = self._make_engine([
+            {"interpretation": {
+                "genre_preference": "avoid_genre",
+                "specific_genres": ["jazz"],
+            }, "confidence": 0.9}
+        ])
+        avoided, _ = engine._get_recent_ai_avoidances()
+        self.assertIn("jazz", avoided)
+
+    def test_no_prefs_returns_empty_sets(self):
+        engine = self._make_engine([
+            {"interpretation": {"overall_sentiment": "neutral"}, "confidence": 0.5}
+        ])
+        avoided_genres, avoided_artists = engine._get_recent_ai_avoidances()
+        self.assertEqual(avoided_genres, set())
+        self.assertEqual(avoided_artists, set())
+
+
 if __name__ == "__main__":
     unittest.main()
