@@ -957,6 +957,13 @@ class HybridRecommendationEngine:
         # AI avoidances from natural-language feedback — computed once before loop
         avoided_genres, avoided_artists = self._get_recent_ai_avoidances()
 
+        # Demo-only: explicit "prefer genre X" feedback boosts matching candidates
+        # so the steering is visible in the next gem. Does NOT touch the LOCKED
+        # formula — it's a post-score multiplier like the source weight / avoidance.
+        demo_preferred_genres = (
+            self._get_recent_ai_preferences() if getattr(settings, 'DEMO_MODE', False) else set()
+        )
+
         # DB genre fallback — always built so genre_sim also benefits from it, not just
         # avoidance. Discovery tracks whose artist isn't in top_artists get genre_sim=0
         # without this; one batch IN-query on indexed spotify_id is cheap.
@@ -1011,6 +1018,19 @@ class HybridRecommendationEngine:
             # Post-score multiplier: apply Thompson-sampled source weight.
             # Unknown source (no key) gets 1.0 — neutral, no boost or penalty.
             rec['score'] *= source_weights.get(rec.get('source', ''), 1.0)
+
+            # Demo-only preference boost: if the candidate's genres match an
+            # explicit "prefer genre X" request, multiply its score so it can beat
+            # novelty-favored obscure picks. Applied before avoidance so an avoided
+            # track still gets suppressed even if it also matches a preferred genre.
+            if demo_preferred_genres:
+                cand_genre_strs = [g.lower() for g in artist_genres]
+                if any(pg in cg for pg in demo_preferred_genres for cg in cand_genre_strs):
+                    rec['score'] *= 3.0
+                    logger.debug(
+                        f"Demo preference boost applied to {artist_name} "
+                        f"(genres={cand_genre_strs}, preferred={demo_preferred_genres})"
+                    )
 
             # AI avoidance penalty: push avoided genres/artists to near-zero score.
             # Substring match handles compound Spotify genre names (e.g. "dark ambient").
@@ -1083,6 +1103,30 @@ class HybridRecommendationEngine:
                 avoided_genres.update(_HIGH_VALENCE_GENRES)
 
         return avoided_genres, avoided_artists
+
+    def _get_recent_ai_preferences(self) -> set:
+        """Extract PREFERRED genres from the last 10 AI feedback entries.
+
+        Mirror of _get_recent_ai_avoidances for the positive direction: explicit
+        prefer_genre extractions plus energy/mood proxies (e.g. "rockier" sets
+        energy_preference=higher → high-energy genres like rock/punk/metal).
+        Used by the demo-only preference boost in the scoring loop so an explicit
+        "more X" request visibly surfaces genre X in the next gem.
+        """
+        ai_history = self.profile.data.get('preferences', {}).get('ai_feedback_history', [])
+        preferred_genres: set = set()
+        for entry in ai_history[-10:]:
+            interp = entry.get('interpretation', {})
+            if interp.get('genre_preference') == 'prefer_genre':
+                for g in (interp.get('specific_genres') or []):
+                    preferred_genres.add(g.lower())
+            if interp.get('energy_preference') == 'higher':
+                preferred_genres.update(_HIGH_ENERGY_GENRES)
+            elif interp.get('energy_preference') == 'lower':
+                preferred_genres.update(_LOW_ENERGY_GENRES)
+            if interp.get('mood_preference') == 'more energetic':
+                preferred_genres.update(_HIGH_ENERGY_GENRES)
+        return preferred_genres
 
     def _get_fallback_recommendations(self, limit: int) -> List[Dict]:
         """Fallback to basic track discovery if hybrid approach fails"""
