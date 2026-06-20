@@ -15,8 +15,11 @@ logger = logging.getLogger(__name__)
 class SpotifyToken(models.Model):
     """Model to store Spotify OAuth tokens for users"""
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    access_token = models.CharField(max_length=255)
-    refresh_token = models.CharField(max_length=255, blank=True, null=True)
+    # TextField (not CharField(255)): Spotify access tokens exceed 255 chars.
+    # SQLite ignores length limits but Postgres enforces them, so CharField(255)
+    # fails on save in production.
+    access_token = models.TextField()
+    refresh_token = models.TextField(blank=True, null=True)
     expires_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
