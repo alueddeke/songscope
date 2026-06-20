@@ -22,22 +22,33 @@ async function getUserName() {
     redirect('/') // or your login page
   }
 
-  const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/get-user-name/`, {
-    headers: sessionCookie ? { 'Cookie': `sessionid=${sessionCookie.value}` } : {},
-    // Prevent caching since this is user-specific data
-    cache: 'no-store'
-  })
+  // In demo mode the backend (free Render tier) may be cold and take 30-50s to
+  // wake. Never let that block the page: fail fast, render with a fallback name,
+  // and let the client child components load data (with their own spinners)
+  // once the backend is awake. This avoids a cold-start 502 on the whole page.
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), isDemo ? 8000 : 30000)
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/get-user-name/`, {
+      headers: sessionCookie ? { 'Cookie': `sessionid=${sessionCookie.value}` } : {},
+      cache: 'no-store',
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout))
 
-  if (!isDemo && (response.status === 401 || response.status === 403)) {
-    redirect('/')
-  }
-  if (!response.ok) {
-    if (isDemo) return 'there' // graceful fallback; don't block the demo
-    throw new Error('Failed to fetch user data')
-  }
+    if (!isDemo && (response.status === 401 || response.status === 403)) {
+      redirect('/')
+    }
+    if (!response.ok) {
+      if (isDemo) return 'there'
+      throw new Error('Failed to fetch user data')
+    }
 
-  const data = await response.json()
-  return data.user_name?.display_name ?? 'there'
+    const data = await response.json()
+    return data.user_name?.display_name ?? 'there'
+  } catch (err) {
+    if (isDemo) return 'there' // cold backend / timeout — render anyway
+    throw err
+  }
 }
 
 const UserProfile = async () => {

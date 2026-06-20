@@ -1,0 +1,18 @@
+name: Keep Render backend warm
+
+# Render's free tier spins the backend down after ~15 min of inactivity, which
+# causes a slow cold start (and can 502 the SSR profile page) for the next
+# visitor. This pings the backend every ~14 min so it stays warm during the day.
+# Note: GitHub disables scheduled workflows after 60 days of repo inactivity.
+
+on:
+  schedule:
+    - cron: '*/14 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend
+        run: curl -sS -m 90 -o /dev/null -w "status %{http_code} in %{time_total}s\n" https://songscope.onrender.com/ || true
