@@ -40,6 +40,26 @@ class DemoModeAuthentication(BaseAuthentication):
         return token.user if token else None
 
 
+class DemoUserMiddleware:
+    """
+    In DEMO_MODE, attach the seeded demo user to every request that isn't
+    already authenticated. DemoModeAuthentication only covers DRF views; this
+    also covers plain Django views guarded by @login_required (which would
+    otherwise 302-redirect to a login page and surface as a 404 in the client,
+    e.g. /api/user-top-artists/). Must sit AFTER AuthenticationMiddleware.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if getattr(settings, "DEMO_MODE", False) and not request.user.is_authenticated:
+            user = DemoModeAuthentication._get_demo_user()
+            if user is not None:
+                request.user = user
+        return self.get_response(request)
+
+
 class CsrfExemptSessionAuthentication(SessionAuthentication):
     """
     SessionAuthentication without CSRF enforcement.

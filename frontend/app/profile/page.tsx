@@ -52,6 +52,7 @@ async function getUserName() {
 }
 
 const UserProfile = async () => {
+  const isDemo = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
   const userName = await getUserName()
 
   return (
@@ -60,7 +61,9 @@ const UserProfile = async () => {
       <UserMenu />
       <section className="min-h-screen flex flex-col justify-center gap-8 p-2 md:p-8 lg:p-16 relative text-center md:text-left">
         <div className="pb-16">
-          <h1 className="text-green text-5xl">Welcome back, {userName}.</h1>
+          <h1 className="text-green text-5xl">
+            {isDemo ? 'Welcome to the SongScope demo.' : `Welcome back, ${userName}.`}
+          </h1>
           <h2 className="text-white mt-16 text-xl">
             We scoped out a song we think you might like.
           </h2>
