@@ -1,16 +1,23 @@
 # SongScope
 
-## Current Milestone: v1.2 Feedback-Driven Recommendation Refinement
+## Current State
+
+**Shipped:** v1.2 UX & Feedback Refinement (2026-06-20). All 10 phases complete.
+
+The visible feedback loop is closed: AI text-feedback sentiment drives the like/dislike toggle (no double API call), taste-evolution stats live-refresh via a `songscope:new-gem` CustomEvent, and the profile UI communicates each metric clearly (semantic Hidden Gem/Rising/Mainstream labels, no manual refresh button, fixed expanded panel, clearer copy).
+
+**Next milestone (v1.3):** Evaluation Dashboard — learning curve, per-source win rates, A/B framework.
+
+**Carried tech debt:** Phase 03 popularity-distribution update never implemented — `apply_feedback_learning()` leaves `preferred_popularity_range` at cold-start defaults. Browser-only UAT for phases 03/05/08 still pending (see STATE.md Deferred Items).
+
+<details>
+<summary>Previous milestone goal (v1.2 — as originally scoped)</summary>
 
 **Goal:** Every piece of user feedback meaningfully improves future song suggestions via full-cascade filtering, while taste evolution stats update live and the profile UI communicates clearly what it's showing.
 
-**Target features:**
-- Full-cascade feedback filtering: AI classifies track traits from text feedback → exclude track / album / artist / genre-mood tag by confidence
-- Like/dislike ↔ text feedback sync: sentiment from text auto-sets thumbs toggle (research to validate exact UX)
-- Taste evolution live update: "when I started vs now" recalculates after every recommendation generation and on session end (currently always zero)
-- Auto-load stats on page load; remove manual "Refresh Stats" button
-- Top artists cards: fix black text readability, clarify or remove yellow/red labels, fix dark color washout — research decides optimal data to surface
-- Taste profile metrics: clearer labels and copy so users understand what each metric means
+**Note:** Phase 10 shipped the sentiment-sync, live-refresh, and UI-quality slices. Full-cascade feedback filtering (AI classifies track traits → exclude track/album/artist/genre-mood by confidence) was deferred to a future milestone.
+
+</details>
 
 ---
 
@@ -83,16 +90,18 @@ Recommend one song per day that the user genuinely discovers — not a song they
 - ✓ Score breakdown UI displayed in frontend ScoreBreakdown component (Phase 8)
 - ✓ CONCEPTS.md and SYSTEM_DESIGN.md updated to reflect v1.1 implementation (Phase 9)
 
-### Active (v1.2 target)
+### Validated in Phase 10 (v1.2 UX & Feedback Refinement — 2026-06-20)
 
-- [ ] Full-cascade feedback filtering from text: AI classifies track traits → exclude track / album / artist / genre-mood tag by confidence
-- [ ] Like/dislike ↔ text feedback sync: text sentiment auto-sets thumbs toggle
-- [ ] Taste evolution "when I started vs now" live update after each recommendation generation and session end
-- [ ] Remove manual "Refresh Stats" button; stats auto-load on page load
-- [ ] Top artists cards: fix black text, clarify yellow/red labels, fix dark color washout, research-driven data display
-- [ ] Taste profile metrics: clearer labels and copy
+- ✓ Like/dislike ↔ text feedback sync: text sentiment auto-sets thumbs toggle (visual only, no 2nd API call) — v1.2
+- ✓ Taste evolution stats live-refresh after each gem via `songscope:new-gem` CustomEvent — v1.2
+- ✓ Removed manual "Refresh Stats" button; stats auto-load on page load — v1.2
+- ✓ Top artists cards: semantic Hidden Gem/Rising/Mainstream labels, fixed transparent expanded panel — v1.2
+- ✓ Taste profile metrics: clearer labels and copy — v1.2
 
 ### Active (future milestones)
+
+- [ ] Full-cascade feedback filtering from text: AI classifies track traits → exclude track / album / artist / genre-mood tag by confidence (deferred from v1.2)
+- [ ] Phase 03 popularity-distribution update: liked track shifts `preferred_popularity_range` toward its popularity (carried tech debt)
 
 - [ ] Evaluation dashboard — learning curve, per-source win rates, A/B framework
 - [ ] Audio feature proxy — replace deprecated Spotify audio_features with AcousticBrainz/Last.fm
@@ -148,6 +157,9 @@ Recommend one song per day that the user genuinely discovers — not a song they
 | Keep original dataset for cold-start priors | If audio features available from alt source, base weights give a head start on taste modeling | — Deferred |
 | Filter known songs before scoring | Core UX failure; must happen before any ML improvement matters | Validated (Phase 1) |
 | SQLite for now | Portfolio scale; easy to demo; migrate to Postgres when/if multi-user | — Pending |
+| AI sentiment mirrors thumbs toggle — visual only | One user action shouldn't trigger a second `/api/submit-feedback/` write | Validated (Phase 10) |
+| `CustomEvent('songscope:new-gem')` for live refresh | Decouples gem generation from stats refresh without prop-drilling | Validated (Phase 10) |
+| Semantic popularity labels (Hidden Gem/Rising/Mainstream) | Original red/green scheme rewarded mainstream — backwards for a hidden-gem app | Validated (Phase 10) |
 
 ## Evolution
 
@@ -167,4 +179,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-19 — v1.1 complete; v1.2 Feedback-Driven Recommendation Refinement started*
+*Last updated: 2026-06-20 — v1.2 UX & Feedback Refinement complete; planning v1.3 (Evaluation Dashboard)*

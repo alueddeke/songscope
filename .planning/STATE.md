@@ -1,90 +1,70 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Explainability + Feedback Loop Closure
+milestone: v1.2
+milestone_name: UX & Feedback Refinement
 status: complete
-stopped_at: Phase 10 execution complete
-last_updated: "2026-06-19T15:50:00.000Z"
-last_activity: 2026-06-19 -- Phase 10 execution complete (3/3 plans)
+stopped_at: v1.2 milestone shipped
+last_updated: "2026-06-20T00:00:00.000Z"
+last_activity: 2026-06-20 -- v1.2 milestone closed and archived
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 10
+  completed_phases: 10
+  total_plans: 29
+  completed_plans: 29
   percent: 100
 ---
 
 # STATE.md — SongScope
 
-_Reconstructed: 2026-05-07 (no prior STATE.md found)_
-
 ## Project Reference
+
+See: .planning/PROJECT.md (updated 2026-06-20)
 
 **What This Is:** Daily music discovery app — one "hidden gem" per day via Spotify OAuth + ML-backed recommendations.
 **Core Value:** Recommend one song per day the user genuinely discovers, using a model that improves from feedback.
+**Current focus:** Between milestones — planning v1.3 (Evaluation Dashboard).
 
 ## Current Position
 
-Phase: 9
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-19 -- Phase 10 planning complete
+Milestone: v1.2 complete (all 10 phases shipped).
+Status: Ready to plan next milestone.
 
 ## Progress
 
-`[██████████] v1.0 complete` — Phases 1–5 done
-`[░░░░░░░░░░] v1.1: 0%` — Phase 6–9 not started
+`[██████████] v1.1 complete` — Phases 1–9 (shipped 2026-05-19)
+`[██████████] v1.2 complete` — Phase 10 (shipped 2026-06-20)
+
+## Deferred Items
+
+Items acknowledged and deferred at milestone close on 2026-06-20:
+
+| Category | Item | Status |
+|----------|------|--------|
+| uat_gap | 03-HUMAN-UAT.md | partial — 2 pending scenarios (live score_breakdown flow; Thompson bandit convergence) |
+| uat_gap | 05-HUMAN-UAT.md | partial — 4 pending scenarios (CSRF round-trip, CSRF rejection, frontend env vars, OAuth flow) |
+| uat_gap | 08-HUMAN-UAT.md | partial — 4 pending scenarios (score bars render, empty state, hit-rate tile, null fallback) |
+| verification_gap | 03-VERIFICATION.md | human_needed — popularity-range update + explanation (explanation fixed in Phase 7) |
+| verification_gap | 05-VERIFICATION.md | human_needed — browser-only CSRF/OAuth checks, no code gap |
+
+**Carried tech debt:** Phase 03 — `apply_feedback_learning()` never mutates `preferred_popularity_range`; bell-curve novelty reads cold-start defaults (midpoint=30, width=20) regardless of feedback. Candidate for a future fix phase.
 
 ## Recent Decisions
 
 | Decision | Status |
 |----------|--------|
 | Content-based filtering as ML approach | Validated (Phase 2) |
-| Compound metric (liked OR saved) — OR not AND | Validated — OR chosen; AND too sparse for daily-gem single-user app |
-| Filter known songs before ML work | Validated (Phase 1) |
-| Deterministic explanation template — no OpenAI | Validated — zero cost, zero latency, formula-synchronized by construction |
-| `score_breakdown` as JSONField + `score_total` as flat FloatField | Validated — one migration, open schema, queryable aggregate |
-| taste_vector_snapshot at recommendation time | Validated — required for offline evaluation; captures model state at pick time |
-
-## Active Requirements (v1.1)
-
-1. SCHEMA-01: DailyGem schema migration (score_breakdown, score_total, taste_vector_snapshot) → Phase 6
-2. METRIC-01: DailyGem.was_saved field → Phase 6
-3. SCHEMA-02: Engine writes score_breakdown at creation → Phase 7
-4. SCHEMA-03: taste_vector_snapshot captured at recommendation time → Phase 7
-5. SCHEMA-04: All 3 cached-branch return sites read score_breakdown from DB → Phase 7
-6. EXPLAIN-01: _build_gem_explanation pure function (no OpenAI) → Phase 7
-7. EXPLAIN-02: DailyGem.explanation populated at creation → Phase 7
-8. METRIC-02: compound_hit_rate in /api/recommendation-metrics/ → Phase 7
-9. EXPLAIN-03: Frontend 3-bar score breakdown component → Phase 8
-10. METRIC-03: MetricsStrip shows compound hit rate → Phase 8
-11. DOCS-01: CONCEPTS.md updated → Phase 9
-12. DOCS-02: SYSTEM_DESIGN.md updated → Phase 9
+| Compound metric (liked OR saved) — OR not AND | Validated |
+| Deterministic explanation template — no OpenAI | Validated |
+| AI sentiment mirrors thumbs toggle — visual only, no 2nd API call | Validated (Phase 10) |
+| CustomEvent('songscope:new-gem') for live stats refresh | Validated (Phase 10) |
+| Semantic popularity labels (Hidden Gem/Rising/Mainstream) | Validated (Phase 10) |
 
 ## Blockers / Concerns
 
-- None at planning stage. Research confidence: HIGH. All patterns confirmed from direct codebase inspection. No new dependencies required.
-- **Watch:** Cached-branch trap — get_daily_gem has 3 return sites (lines ~1048/1110/1126); all must be fixed in Phase 7 or score_breakdown silently returns {} on cached responses.
-- **Watch:** Two-path compound metric — was_saved must be wired in add_track_to_liked, NOT submit_feedback. These are independent code paths.
-
-## Phase 1–5 Resolved (v1.0)
-
-- ✓ `Count` import fix + `update_weights` arity crash fixed
-- ✓ `RecommendationLog.liked` written on LIKE/DISLIKE/unlike
-- ✓ `DailyGem.was_liked` synced from submit_feedback view
-- ✓ DB-backed exclusion set (RecommendationLog + DailyGem history)
-- ✓ Top-artist name filter replaced by track-level exclusion
-- ✓ `artist_related_artists` added as 5th candidate strategy
-- ✓ Test suite fixed (31 phase-relevant tests collected, all pass)
-- ✓ Genre taste vector + cosine similarity scorer (Phase 2)
-- ✓ Online taste vector update on like/dislike (Phase 3)
-- ✓ Thompson Sampling bandit over 5 candidate sources (Phase 3)
-- ✓ SECRET_KEY rotated to env var via python-decouple (Phase 5)
-- ✓ Spotify CLIENT_SECRET removed from frontend bundle (Phase 5)
-- ✓ CsrfViewMiddleware re-enabled (Phase 5)
+- None blocking. See Deferred Items for browser-only UAT and the Phase 03 popularity-range tech debt.
 
 ## Session Continuity
 
-Last session: 2026-06-19T15:42:08.617Z
-Stopped at: Phase 10 context gathered
+Last session: 2026-06-20
+Stopped at: v1.2 milestone closed and archived
 Resume file: None

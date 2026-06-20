@@ -1,19 +1,55 @@
-## Phase 10: v1.2 UX & Feedback Refinement
-**Goal**: Close the visible feedback loop — AI text feedback syncs the thumbs toggle, taste evolution stats live-refresh after new gems, and the profile page UI communicates what it shows without ambiguity.
-**Depends on**: Phase 9
-**Requirements**: SYNC-01, SYNC-02, SYNC-03, EVOLVE-01, EVOLVE-02, UI-01, UI-02, UI-03, UI-04
-**Success Criteria** (what must be TRUE):
-  1. Submitting AI text feedback with positive/negative sentiment automatically updates the like/dislike toggle visual state in FeedbackButtonGroup — no double API call
-  2. Generating a new gem (force_new=true) triggers ImprovementStory to refetch — delta updates without page reload
-  3. MetricsStrip has no "Refresh stats" button; all stats load automatically on mount
-  4. TopArtists cards show "Hidden Gem" (green) for popularity < 40, "Rising" (yellow) for 40–69, "Mainstream" (gray) for ≥70 — not the inverse color scheme
-  5. TopArtists expanded section has visible background (bg-gray-800 not bg-gray-850)
-**Plans**: 3 plans
+# Roadmap: SongScope
 
-Plans:
-**Wave 1** *(parallel — no file overlap)*
-- [x] 10-01-PLAN.md — Backend overall_sentiment field: Wave-0 RED tests + _build_prompt schema/rule + _fallback_interpretation key (SYNC-01)
-- [x] 10-02-PLAN.md — Profile UI quality fixes: remove Refresh button, semantic popularity labels, visible expanded panel, clearer subtitle (UI-01, UI-02, UI-03, UI-04)
+## Milestones
 
-**Wave 2** *(blocked on 10-01 — consumes overall_sentiment contract)*
-- [x] 10-03-PLAN.md — Feedback-loop wiring: syncedFeedback mirror, aiSyncedFeedback mapping + CustomEvent dispatch, ImprovementStory live-refresh listener (SYNC-02, SYNC-03, EVOLVE-01, EVOLVE-02)
+- ✅ **v1.1 Explainability + Feedback Loop Closure** — Phases 1–9 (shipped 2026-05-19)
+- ✅ **v1.2 UX & Feedback Refinement** — Phase 10 (shipped 2026-06-20)
+
+## Phases
+
+<details>
+<summary>✅ v1.1 Explainability + Feedback Loop Closure (Phases 1–9) — SHIPPED 2026-05-19</summary>
+
+- [x] Phase 1: Fix Foundation (4/4 plans)
+- [x] Phase 2: User Taste Vector & Real Scoring (3/3 plans)
+- [x] Phase 3: Feedback Learning Loop (4/4 plans)
+- [x] Phase 4: Metrics, Evaluation & Documentation (4/4 plans)
+- [x] Phase 5: Security Hardening (3/3 plans)
+- [x] Phase 6: Schema Migration (2/2 plans)
+- [x] Phase 7: Backend Wiring (2/2 plans)
+- [x] Phase 8: Frontend Score Breakdown (1/1 plan)
+- [x] Phase 9: Documentation Sync (3/3 plans)
+
+Full detail: `milestones/v1.1-ROADMAP.md`
+
+</details>
+
+<details>
+<summary>✅ v1.2 UX & Feedback Refinement (Phase 10) — SHIPPED 2026-06-20</summary>
+
+- [x] Phase 10: v1.2 UX & Feedback Refinement (3/3 plans)
+
+Full detail: `milestones/v1.2-ROADMAP.md`
+
+</details>
+
+## Next Milestone (planned)
+
+- 📋 **v1.3 Evaluation Dashboard** — learning curve, per-source win rates, A/B framework
+
+Start with `/gsd:new-milestone`.
+
+## Progress
+
+| Phase                              | Milestone | Plans | Status   | Completed  |
+| ---------------------------------- | --------- | ----- | -------- | ---------- |
+| 1. Fix Foundation                  | v1.1      | 4/4   | Complete | 2026-05-07 |
+| 2. User Taste Vector & Scoring     | v1.1      | 3/3   | Complete | 2026-05-07 |
+| 3. Feedback Learning Loop          | v1.1      | 4/4   | Complete | 2026-05-12 |
+| 4. Metrics, Eval & Documentation   | v1.1      | 4/4   | Complete | 2026-05-12 |
+| 5. Security Hardening              | v1.1      | 3/3   | Complete | 2026-05-12 |
+| 6. Schema Migration                | v1.1      | 2/2   | Complete | 2026-05-14 |
+| 7. Backend Wiring                  | v1.1      | 2/2   | Complete | 2026-05-19 |
+| 8. Frontend Score Breakdown        | v1.1      | 1/1   | Complete | 2026-05-19 |
+| 9. Documentation Sync              | v1.1      | 3/3   | Complete | 2026-05-19 |
+| 10. UX & Feedback Refinement       | v1.2      | 3/3   | Complete | 2026-06-20 |
