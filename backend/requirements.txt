@@ -10,6 +10,7 @@ spotipy==2.25.1
 requests==2.32.5
 requests-oauthlib==2.0.0
 openai==2.36.0
+numpy==1.26.4
 
 # Production deploy dependencies (Render web service + Postgres + static files)
 gunicorn==23.0.0
