@@ -9,31 +9,30 @@ import TasteProfileChart from './components/TasteProfileChart/TasteProfileChart'
 import DiversityScore from './components/DiversityScore/DiversityScore'
 import ImprovementStory from './components/ImprovementStory/ImprovementStory'
 import UserMenu from './components/UserMenu/UserMenu'
+import DemoBanner from '../components/DemoBanner'
 
 async function getUserName() {
+  // Demo mode: no per-user login — the backend resolves the seeded demo user,
+  // so skip the session-cookie gate entirely.
+  const isDemo = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
   const cookieStore = cookies()
-  // Get your Django session cookie - you'll need to check the exact name
-  // It's often something like 'sessionid' or 'csrftoken'
   const sessionCookie = cookieStore.get('sessionid')
 
-  if (!sessionCookie) {
+  if (!isDemo && !sessionCookie) {
     redirect('/') // or your login page
   }
 
-          const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/get-user-name/`, {
-    headers: {
-      'Cookie': `sessionid=${sessionCookie.value}`,
-      // If you're using CSRF protection, include that token too
-      // 'X-CSRFToken': csrfCookie.value
-    },
+  const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/get-user-name/`, {
+    headers: sessionCookie ? { 'Cookie': `sessionid=${sessionCookie.value}` } : {},
     // Prevent caching since this is user-specific data
     cache: 'no-store'
   })
 
-  if (response.status === 401 || response.status === 403) {
+  if (!isDemo && (response.status === 401 || response.status === 403)) {
     redirect('/')
   }
   if (!response.ok) {
+    if (isDemo) return 'there' // graceful fallback; don't block the demo
     throw new Error('Failed to fetch user data')
   }
 
@@ -46,6 +45,7 @@ const UserProfile = async () => {
 
   return (
     <div className="w-[100%] max-w-[1300px] mx-auto">
+      <DemoBanner />
       <UserMenu />
       <section className="min-h-screen flex flex-col justify-center gap-8 p-2 md:p-8 lg:p-16 relative text-center md:text-left">
         <div className="pb-16">

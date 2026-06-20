@@ -15,6 +15,12 @@ from decouple import config
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
 
+# Demo mode: serve the app as a single seeded Spotify account with NO per-user
+# login (see config.auth.DemoModeAuthentication). Powers the public portfolio
+# demo. Default False keeps the normal login flow intact for local dev.
+DEMO_MODE = config('DEMO_MODE', default=False, cast=bool)
+DEMO_USER_ID = config('DEMO_USER_ID', default=1, cast=int)
+
 SPOTIFY_CLIENT_ID = config('SPOTIFY_CLIENT_ID')
 SPOTIFY_CLIENT_SECRET = config('SPOTIFY_CLIENT_SECRET')
 SPOTIFY_REDIRECT_URI = config('SPOTIFY_REDIRECT_URI')
@@ -36,7 +42,11 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(','
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
+    # In demo mode, DemoModeAuthentication resolves every request to the seeded
+    # demo user (no cookie). Session auth stays as a fallback / for local login.
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        ['config.auth.DemoModeAuthentication'] if DEMO_MODE else []
+    ) + [
         'config.auth.CsrfExemptSessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
@@ -69,9 +79,16 @@ INSTALLED_APPS = [
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  
-    "http://127.0.0.1:3000",  
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
+
+# Prod frontend origin(s): comma-separated https URLs (the Netlify site).
+# Appended to the localhost defaults so dev + prod both work.
+_extra_origins = [
+    o.strip() for o in config('EXTRA_ALLOWED_ORIGINS', default='').split(',') if o.strip()
+]
+CORS_ALLOWED_ORIGINS += _extra_origins
 
 CORS_ORIGIN_WHITELIST = [
     "http://localhost:3000"
@@ -80,7 +97,7 @@ CORS_ORIGIN_WHITELIST = [
 # CSRF settings
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",  # Your Next.js frontend
-]
+] + _extra_origins
 CSRF_USE_SESSIONS = False
 CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript access to the cookie
 CSRF_COOKIE_SAMESITE = 'Lax'
@@ -107,12 +124,17 @@ LOGGING = {
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
+# Local dev uses SQLite; production sets DATABASE_URL (Render Postgres),
+# parsed by dj-database-url.
+
+import dj_database_url
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    "default": dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600,
+        ssl_require=not DEBUG and bool(config('DATABASE_URL', default='')),
+    )
 }
 
 # Password validation
@@ -148,6 +170,11 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # collectstatic target for prod
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
@@ -181,6 +208,7 @@ WSGI_APPLICATION = "config.wsgi.application"
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # serve static files in prod
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

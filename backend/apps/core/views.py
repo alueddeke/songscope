@@ -832,11 +832,17 @@ def check_track_feedback(request, track_id):
         return JsonResponse({'error': 'Failed to check feedback'}, status=500)
 
 def get_user_name(request):
-    if not request.user.is_authenticated:
-        return JsonResponse({'error': 'Not authenticated'}, status=401)
     """Get user's name using Spotipy"""
+    # Plain Django view (not DRF), so DemoModeAuthentication does not apply here.
+    # Resolve the seeded demo user directly when DEMO_MODE is on.
+    user = request.user
+    if getattr(settings, 'DEMO_MODE', False) and not user.is_authenticated:
+        from config.auth import DemoModeAuthentication
+        user = DemoModeAuthentication._get_demo_user()
+    if user is None or not user.is_authenticated:
+        return JsonResponse({'error': 'Not authenticated'}, status=401)
     try:
-        spotify_token = SpotifyToken.objects.get(user=request.user)
+        spotify_token = SpotifyToken.objects.get(user=user)
         if spotify_token.is_expired():
             spotify_token = refresh_spotify_token(spotify_token)
         
@@ -868,6 +874,11 @@ def add_track_to_liked(request):
         track_id = request.data.get("track_id")
         if not track_id:
             return JsonResponse({'error': 'track_id is required'}, status=400)
+
+        # Demo mode: never write to the shared demo account's real Spotify
+        # library. Return success-shaped so the UI behaves, without mutating.
+        if getattr(settings, 'DEMO_MODE', False):
+            return JsonResponse({'message': "saved (demo mode — not written to the shared Spotify account)"})
 
         spotify_token = SpotifyToken.objects.get(user=request.user)
         if spotify_token.is_expired():

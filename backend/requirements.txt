@@ -1,6 +1,18 @@
-Django==5.1.3
-djangorestframework==3.15.2
-spotipy==2.23.0
-requests==2.31.0
-python-dotenv==1.0.0
-openai==1.99.9
+# App dependencies — pinned to the versions the local demo was just validated
+# against (so the Render deploy mirrors verified behavior).
+# NOTE: config() comes from python-decouple (NOT python-dotenv); the previous
+# requirements.txt was stale and missing python-decouple + django-cors-headers.
+Django==5.2.5
+djangorestframework==3.16.1
+django-cors-headers==4.7.0
+python-decouple==3.8
+spotipy==2.25.1
+requests==2.32.5
+requests-oauthlib==2.0.0
+openai==2.36.0
+
+# Production deploy dependencies (Render web service + Postgres + static files)
+gunicorn==23.0.0
+psycopg2-binary==2.9.9
+whitenoise==6.8.2
+dj-database-url==2.3.0
