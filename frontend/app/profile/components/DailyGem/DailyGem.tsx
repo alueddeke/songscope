@@ -209,39 +209,42 @@ export default function DailyGem() {
           />
         </div>
 
-        {/* Prompts after feedback */}
+        {/* Prompts after feedback — emphasize the feedback → new-pick loop */}
         {likePrompt && (
           <div className="pt-4 border-t border-gray-800 flex flex-col gap-2">
-            <p className="text-gray-400 text-sm">Glad you liked it. Want something similar?</p>
+            <p className="text-green text-sm font-medium">Noted — that boosts similar tracks. See how it changes the next pick:</p>
             <button
               onClick={() => { setLikePrompt(false); fetchGem(true); }}
-              className="bg-green text-black font-semibold rounded-full px-5 py-2 hover:scale-105 transition-transform text-sm w-fit"
+              className="bg-green text-black font-bold rounded-full px-6 py-3 hover:scale-105 transition-transform text-base w-fit shadow-lg shadow-green/20"
             >
-              Find me another
+              Generate new gem →
             </button>
           </div>
         )}
         {showNewGemPrompt && (
           <div className="pt-4 border-t border-gray-800 flex flex-col gap-2">
-            <p className="text-gray-400 text-sm">Not feeling this one?</p>
+            <p className="text-green text-sm font-medium">Got it — steering away from this. See the next recommendation adjust:</p>
             <button
               onClick={() => fetchGem(true)}
-              className="bg-green text-black font-semibold rounded-full px-5 py-2 hover:scale-105 transition-transform text-sm w-fit"
+              className="bg-green text-black font-bold rounded-full px-6 py-3 hover:scale-105 transition-transform text-base w-fit shadow-lg shadow-green/20"
             >
-              Find me another song
+              Generate new gem →
             </button>
           </div>
         )}
 
-        {/* Dev shortcut — always visible, low-key */}
-        <div className="pt-2">
-          <button
-            onClick={() => fetchGem(true)}
-            className="text-gray-600 text-xs hover:text-gray-400 transition-colors"
-          >
-            Generate new gem
-          </button>
-        </div>
+        {/* Always-visible generate — the core demo action: feedback then regenerate */}
+        {!likePrompt && !showNewGemPrompt && (
+          <div className="pt-4 border-t border-gray-800 flex flex-col gap-2">
+            <p className="text-gray-400 text-sm">React above, then generate — each new gem reflects your feedback.</p>
+            <button
+              onClick={() => fetchGem(true)}
+              className="border border-green text-green font-semibold rounded-full px-6 py-3 hover:bg-green hover:text-black transition-colors text-base w-fit"
+            >
+              Generate new gem →
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modal: prompt after AI feedback submitted */}

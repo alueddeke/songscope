@@ -513,6 +513,28 @@ def get_recommendation_trend(request):
     """
     try:
         user = request.user
+
+        # Demo mode: a session never spans days, and force_new replaces the
+        # single daily gem, so a date-based trend can't move. Instead plot the
+        # cumulative like-rate over the user's feedback events so the line
+        # advances with every like/dislike — the core demo loop.
+        if getattr(settings, 'DEMO_MODE', False):
+            fbs = list(
+                UserFeedback.objects
+                .filter(user=user, feedback_type__in=['LIKE', 'DISLIKE'])
+                .order_by('created_at')
+                .values('feedback_type')
+            )
+            points = []
+            liked = 0
+            for i, fb in enumerate(fbs, start=1):
+                if fb['feedback_type'] == 'LIKE':
+                    liked += 1
+                points.append({'label': f'#{i}', 'like_rate': round(liked / i * 100, 1)})
+            if len(points) < 2:
+                return JsonResponse({'data': [], 'message': 'Not enough data'})
+            return JsonResponse({'data': points})
+
         gems = list(
             DailyGem.objects.filter(user=user)
             .order_by('date')

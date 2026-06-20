@@ -13,7 +13,8 @@ import {
 import { get } from "../../../../services/axios";
 
 interface TrendPoint {
-  date: string;
+  date?: string;
+  label?: string; // demo mode: per-feedback sequence label (e.g. "#1")
   like_rate: number;
 }
 
@@ -59,10 +60,14 @@ export default function LikeTrendChart() {
     );
   }
 
+  // Demo mode returns a per-feedback sequence ({label, like_rate}); normal mode
+  // returns a date series ({date, like_rate}).
+  const isSequence = data.length > 0 && data[0].label !== undefined;
+
   if (data.length < 2) {
     return (
       <p className="text-gray-400 text-sm text-center py-8">
-        Not enough data yet — your like-rate trend will appear after a few days of gems.
+        Like or dislike a couple of gems and your taste trend will start moving here.
       </p>
     );
   }
@@ -72,12 +77,15 @@ export default function LikeTrendChart() {
       <LineChart data={data}>
         <CartesianGrid stroke="#374151" />
         <XAxis
-          dataKey="date"
-          tickFormatter={(d: string) =>
-            new Date(d + "T00:00:00").toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })
+          dataKey={isSequence ? "label" : "date"}
+          tickFormatter={
+            isSequence
+              ? (v: string) => v
+              : (d: string) =>
+                  new Date(d + "T00:00:00").toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })
           }
           tick={{ fill: "#6b7280", fontSize: 12 }}
         />
