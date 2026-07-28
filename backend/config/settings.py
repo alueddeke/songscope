@@ -124,18 +124,33 @@ LOGGING = {
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-# Local dev uses SQLite; production sets DATABASE_URL (Render Postgres),
+# Local dev uses SQLite; production sets DATABASE_URL (Supabase Postgres),
 # parsed by dj-database-url.
+#
+# Supabase's direct host (db.<ref>.supabase.co) is IPv6-only unless you pay for
+# the IPv4 add-on, and Render cannot reach it — so DATABASE_URL must point at
+# the Supavisor pooler (aws-<region>.pooler.supabase.com). Use *session* mode
+# on port 5432: it speaks full Postgres and tolerates persistent connections.
+# Transaction mode (6543) multiplexes connections and breaks both persistent
+# connections and server-side cursors, so if that URL is ever pasted in by
+# mistake we degrade the settings to something that still works rather than
+# failing in production with confusing prepared-statement errors.
 
 import dj_database_url
+
+_database_url = config('DATABASE_URL', default='')
+_transaction_pooler = ':6543/' in _database_url
 
 DATABASES = {
     "default": dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600,
-        ssl_require=not DEBUG and bool(config('DATABASE_URL', default='')),
+        conn_max_age=0 if _transaction_pooler else 600,
+        ssl_require=not DEBUG and bool(_database_url),
     )
 }
+
+if _transaction_pooler:
+    DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators

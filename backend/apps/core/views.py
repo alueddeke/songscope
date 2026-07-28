@@ -42,6 +42,26 @@ scope = 'user-read-private user-read-email user-top-read user-read-recently-play
 authorization_base_url = 'https://accounts.spotify.com/authorize'
 token_url = 'https://accounts.spotify.com/api/token'
 
+
+@require_http_methods(["GET", "HEAD"])
+def healthz(request):
+    """Liveness probe that deliberately touches the database.
+
+    The keep-warm cron pings this instead of `/`. Hitting the DRF router root
+    only kept the Render instance warm — it never issued a query, so Supabase
+    counted the project as idle and would pause it after 7 days on the free
+    plan. A real (cheap, indexed) read resets that inactivity timer and doubles
+    as a connectivity check on the Supavisor pooler.
+    """
+    try:
+        User.objects.exists()
+    except Exception as exc:
+        logger.error("healthz database check failed: %s", exc)
+        return JsonResponse({"status": "error", "database": "unreachable"}, status=503)
+
+    return JsonResponse({"status": "ok", "database": "ok"})
+
+
 def spotify_login(request):
     client_id = settings.SPOTIFY_CLIENT_ID
     redirect_uri = settings.SPOTIFY_REDIRECT_URI

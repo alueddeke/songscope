@@ -29,6 +29,9 @@ router = routers.DefaultRouter()
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Keep-warm/uptime target. Must stay unauthenticated and DB-touching —
+    # see views.healthz for why the cron can't just ping '/'.
+    path('healthz/', views.healthz, name='healthz'),
     path('', include(router.urls)),
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     path('spotify-login/', views.spotify_login, name='spotify-login'),

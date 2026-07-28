@@ -1,18 +1,93 @@
 name: Keep Render backend warm
 
-# Render's free tier spins the backend down after ~15 min of inactivity, which
-# causes a slow cold start (and can 502 the SSR profile page) for the next
-# visitor. This pings the backend every ~14 min so it stays warm during the day.
-# Note: GitHub disables scheduled workflows after 60 days of repo inactivity.
+# Two free-tier timers have to be reset for the public demo to stay reachable
+# without anyone babysitting it:
+#
+#   1. Render spins the free web service down after ~15 min of inactivity,
+#      causing a 50s+ cold start (and previously a 502 on the SSR profile page).
+#   2. Supabase pauses free projects after 7 days with no database activity.
+#      A paused project needs a manual restore from the dashboard.
+#
+# Pinging '/' only fixed (1) — that route is the DRF router root and never
+# issues a query, so Supabase still saw an idle database. This pings /healthz/,
+# which deliberately performs a cheap indexed read, resetting both timers.
+#
+# GitHub also disables scheduled workflows after 60 days without repository
+# activity, which would silently kill the whole arrangement. The keepalive job
+# below pushes an empty commit to a throwaway `keepalive` branch every ~50 days
+# to reset that timer while leaving main's history clean.
 
 on:
   schedule:
-    - cron: '*/14 * * * *'
+    - cron: '*/14 * * * *'   # keep Render + Supabase awake
+    - cron: '0 3 * * *'      # daily keepalive check (cheap: usually a no-op)
   workflow_dispatch:
+
+concurrency:
+  group: keep-warm
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  HEALTH_URL: https://songscope.onrender.com/healthz/
 
 jobs:
   ping:
+    if: github.event.schedule != '0 3 * * *'
     runs-on: ubuntu-latest
     steps:
-      - name: Ping backend
-        run: curl -sS -m 90 -o /dev/null -w "status %{http_code} in %{time_total}s\n" https://songscope.onrender.com/ || true
+      - name: Ping backend health endpoint
+        run: |
+          # Cold starts are slow, so retry before declaring the demo down.
+          # A hard failure here is intentional: it emails the repo owner
+          # instead of silently swallowing a broken deploy or paused database.
+          for attempt in 1 2 3; do
+            status=$(curl -sS -m 120 -o /tmp/body.txt -w '%{http_code}' "$HEALTH_URL" || echo 000)
+            echo "attempt $attempt: status $status"
+            cat /tmp/body.txt || true
+            echo
+            if [ "$status" = "200" ]; then
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::$HEALTH_URL did not return 200 after 3 attempts (last status $status)"
+          exit 1
+
+  keepalive:
+    # Guards against GitHub's 60-day scheduled-workflow shutoff. Checked once a
+    # day; only actually pushes when the last keepalive commit is stale.
+    if: github.event.schedule == '0 3 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Refresh repository activity if stale
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin keepalive:refs/remotes/origin/keepalive 2>/dev/null || true
+          if git rev-parse --verify -q refs/remotes/origin/keepalive >/dev/null; then
+            last=$(git log -1 --format=%ct refs/remotes/origin/keepalive)
+          else
+            last=0
+          fi
+
+          age_days=$(( ( $(date +%s) - last ) / 86400 ))
+          echo "last keepalive commit: ${age_days}d ago"
+          if [ "$age_days" -lt 50 ]; then
+            echo "still fresh — nothing to do"
+            exit 0
+          fi
+
+          # Orphan branch: never merged, keeps main's history free of noise.
+          git checkout --orphan keepalive
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          git commit --allow-empty -m "chore: keepalive ping to preserve scheduled workflows"
+          git push --force origin keepalive
