@@ -38,37 +38,37 @@ string yields a slower app rather than cryptic runtime failures.
 1. Create a free Supabase project in a region near the Render service.
 2. Copy the **Session pooler** URI from *Project Settings → Database*.
 3. In the Render dashboard, set `DATABASE_URL` to that URI.
-4. Redeploy, then open the Render shell and run:
-
-   ```
-   python manage.py migrate
-   python manage.py seed_demo
-   ```
-
-   `seed_demo` recreates the demo account from
-   `DEMO_USER_SPOTIFY_REFRESH_TOKEN`, so a blank database is fully recoverable —
-   no dump from the old Render instance is required.
+4. Redeploy. Nothing manual after that: the start command runs `seed_demo`,
+   which applies migrations first and then recreates the demo account from
+   `DEMO_USER_SPOTIFY_REFRESH_TOKEN` — a blank database is fully recoverable,
+   no dump from the old instance required. Migration `0010_keepalive_pg_cron`
+   also re-schedules the keep-warm jobs (below) on the fresh database.
 5. Confirm `https://songscope.onrender.com/healthz/` returns
-   `{"status": "ok", "database": "ok"}`.
+   `{"status": "ok", "database": "ok", "keepalive_jobs": 2}`.
 
 ## Staying alive without supervision
 
-Three separate timers would otherwise take the demo down, and
-`.github/workflows/keep-warm.yml` resets all three:
+Three separate timers would otherwise take the demo down:
 
 | Timer | Trigger | How it is handled |
 | --- | --- | --- |
-| Render spins the free instance down | ~15 min idle | `/healthz/` pinged every 14 min |
+| Render spins the free instance down | ~15 min idle | Supabase `pg_cron` GETs `/healthz/` every 10 min via `pg_net` |
 | Supabase pauses the project | 7 days without database activity | `/healthz/` runs a real query, so every ping counts as activity |
 | GitHub disables scheduled workflows | 60 days without repository activity | daily job pushes an empty commit to the orphan `keepalive` branch once it is ~50 days stale |
 
-The critical detail is that `/healthz/` performs a database read. The workflow
-used to ping `/`, which is the DRF router root and never queries anything — it
-kept Render warm while Supabase quietly counted the project as idle.
+The ping lives in the database itself (migration `0010_keepalive_pg_cron`),
+not in GitHub Actions: GitHub's free-tier cron delivered only ~20 of ~100
+scheduled runs a day with multi-hour gaps, so Render slept between pings, and
+runner hiccups emailed false alarms. pg_cron fires on time because it runs
+inside the always-on Postgres instance, and its ping loop is self-reinforcing:
+Supabase keeps Render awake, Render's `/healthz/` read keeps Supabase active.
+A weekly `purge-cron-history` job trims `cron.job_run_details`.
 
-The ping job fails loudly (non-zero exit) after three attempts so GitHub emails
-you instead of silently masking an outage. The `keepalive` branch is an orphan
-and is never merged, so `main`'s history stays clean.
+`.github/workflows/keep-warm.yml` is now a daily watchdog. It requires a 200
+from `/healthz/` **and** `"keepalive_jobs": 2` in the body (the handler counts
+the pg_cron jobs), failing loudly so GitHub emails you if the deploy breaks,
+the database is wiped, or the cron schedule disappears. The `keepalive` branch
+is an orphan and is never merged, so `main`'s history stays clean.
 
 ## Free-plan headroom
 

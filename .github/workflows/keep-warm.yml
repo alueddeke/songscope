@@ -1,26 +1,30 @@
-name: Keep Render backend warm
+name: Demo watchdog
 
-# Two free-tier timers have to be reset for the public demo to stay reachable
-# without anyone babysitting it:
+# The every-14-minute ping that used to live here moved into Supabase pg_cron
+# (backend/apps/core/migrations/0010_keepalive_pg_cron.py). GitHub's free-tier
+# cron was the weak link: of ~100 scheduled runs a day it delivered ~20, with
+# multi-hour gaps — so Render slept between pings anyway — and GitHub's own
+# runner failures emailed false alarms. pg_cron fires on time because it runs
+# inside the always-on Supabase Postgres: it GETs /healthz/ every 10 minutes,
+# which keeps Render awake, and the handler's indexed read resets Supabase's
+# 7-day inactivity timer in the same request. Self-contained loop.
 #
-#   1. Render spins the free web service down after ~15 min of inactivity,
-#      causing a 50s+ cold start (and previously a 502 on the SSR profile page).
-#   2. Supabase pauses free projects after 7 days with no database activity.
-#      A paused project needs a manual restore from the dashboard.
+# What remains here is the part GitHub is good at — being somewhere else:
 #
-# Pinging '/' only fixed (1) — that route is the DRF router root and never
-# issues a query, so Supabase still saw an idle database. This pings /healthz/,
-# which deliberately performs a cheap indexed read, resetting both timers.
+#   1. `check`: a once-a-day loud probe of the whole loop. It requires both a
+#      200 from /healthz/ AND `"keepalive_jobs": 2` in the body (the handler
+#      counts the pg_cron jobs), so a broken deploy, a wiped database, or a
+#      lost cron schedule all end in an email to the repo owner instead of a
+#      silently sleeping demo.
 #
-# GitHub also disables scheduled workflows after 60 days without repository
-# activity, which would silently kill the whole arrangement. The keepalive job
-# below pushes an empty commit to a throwaway `keepalive` branch every ~50 days
-# to reset that timer while leaving main's history clean.
+#   2. `keepalive`: GitHub disables scheduled workflows after 60 days without
+#      repository activity, which would silently kill the daily check. This
+#      pushes an empty commit to the orphan `keepalive` branch every ~50 days
+#      to reset that timer while leaving main's history clean.
 
 on:
   schedule:
-    - cron: '*/14 * * * *'   # keep Render + Supabase awake
-    - cron: '0 3 * * *'      # daily keepalive check (cheap: usually a no-op)
+    - cron: '23 14 * * *'   # daily; odd minute to dodge GitHub's :00 cron rush
   workflow_dispatch:
 
 concurrency:
@@ -34,32 +38,28 @@ env:
   HEALTH_URL: https://songscope.onrender.com/healthz/
 
 jobs:
-  ping:
-    if: github.event.schedule != '0 3 * * *'
+  check:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping backend health endpoint
+      - name: Verify demo is up and keepalive loop intact
         run: |
-          # Cold starts are slow, so retry before declaring the demo down.
-          # A hard failure here is intentional: it emails the repo owner
-          # instead of silently swallowing a broken deploy or paused database.
+          # -m 120 tolerates a cold start in case the pg_cron loop just broke;
+          # the retry loop tolerates a transient network blip. A hard failure
+          # is intentional: it emails the repo owner.
           for attempt in 1 2 3; do
             status=$(curl -sS -m 120 -o /tmp/body.txt -w '%{http_code}' "$HEALTH_URL" || echo 000)
             echo "attempt $attempt: status $status"
             cat /tmp/body.txt || true
             echo
-            if [ "$status" = "200" ]; then
+            if [ "$status" = "200" ] && grep -q '"keepalive_jobs": 2' /tmp/body.txt; then
               exit 0
             fi
             sleep 20
           done
-          echo "::error::$HEALTH_URL did not return 200 after 3 attempts (last status $status)"
+          echo "::error::$HEALTH_URL unhealthy or pg_cron keepalive jobs missing (last status $status)"
           exit 1
 
   keepalive:
-    # Guards against GitHub's 60-day scheduled-workflow shutoff. Checked once a
-    # day; only actually pushes when the last keepalive commit is stale.
-    if: github.event.schedule == '0 3 * * *'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -71,21 +71,18 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git fetch origin keepalive:refs/remotes/origin/keepalive 2>/dev/null || true
           if git rev-parse --verify -q refs/remotes/origin/keepalive >/dev/null; then
             last=$(git log -1 --format=%ct refs/remotes/origin/keepalive)
           else
             last=0
           fi
-
           age_days=$(( ( $(date +%s) - last ) / 86400 ))
           echo "last keepalive commit: ${age_days}d ago"
           if [ "$age_days" -lt 50 ]; then
             echo "still fresh — nothing to do"
             exit 0
           fi
-
           # Orphan branch: never merged, keeps main's history free of noise.
           git checkout --orphan keepalive
           git rm -rf --cached . >/dev/null 2>&1 || true

@@ -17,6 +17,7 @@ Optional env:
 """
 from datetime import timedelta
 
+from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -29,6 +30,11 @@ class Command(BaseCommand):
     help = "Create/update the demo user + Spotify token for DEMO_MODE."
 
     def handle(self, *args, **options):
+        # Render's start command is `seed_demo && gunicorn`; running migrate
+        # here makes every deploy self-contained — no "open the Render shell
+        # and run migrate" step to forget.
+        call_command("migrate", interactive=False)
+
         refresh_token = config("DEMO_USER_SPOTIFY_REFRESH_TOKEN", default="")
         if not refresh_token:
             self.stderr.write(

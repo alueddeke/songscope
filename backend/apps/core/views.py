@@ -8,6 +8,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.db import connection
 from django.db.models import Avg
 from django.utils import timezone
 from datetime import timedelta  # date removed: using timezone.localdate() everywhere
@@ -59,7 +60,21 @@ def healthz(request):
         logger.error("healthz database check failed: %s", exc)
         return JsonResponse({"status": "error", "database": "unreachable"}, status=503)
 
-    return JsonResponse({"status": "ok", "database": "ok"})
+    payload = {"status": "ok", "database": "ok"}
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "select count(*) from cron.job "
+                "where jobname in ('keep-render-warm', 'purge-cron-history')"
+            )
+            payload["keepalive_jobs"] = cursor.fetchone()[0]
+    except Exception:
+        # SQLite dev, or pg_cron absent — the probe still answers. The daily
+        # watchdog workflow asserts keepalive_jobs == 2, so losing the cron
+        # jobs (wiped database, manual unschedule) emails the repo owner.
+        pass
+
+    return JsonResponse(payload)
 
 
 def spotify_login(request):
